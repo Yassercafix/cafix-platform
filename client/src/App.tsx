@@ -112,15 +112,21 @@ function Router() {
 
 function App() {
   const [, setLocation] = useLocation();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const [autoLogoutTime, setAutoLogoutTime] = useState(120 * 60 * 1000); // Default 2 hours
 
-  // This useEffect now relies on the useAuth hook for authentication state
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
+
     const checkSession = async () => {
+      // Only act on session expiry once auth state has fully resolved (loading=false).
+      // This prevents the race condition where the app sees last_activity in localStorage
+      // but useAuth hasn't finished its first authSupabase.me call yet, which would
+      // incorrectly trigger a "session expired" redirect immediately after login.
+      if (loading) return;
+
       if (!isAuthenticated && localStorage.getItem('last_activity')) {
-        // If not authenticated by useAuth but localStorage still has activity, force logout
+        // Auth resolved as unauthenticated but we have stale last_activity → clear and redirect.
         localStorage.removeItem('last_activity');
         toast.error("Session expired. Please login again.");
         setLocation('/login');
@@ -132,7 +138,7 @@ function App() {
         if (lastActivity) {
           const now = Date.now();
           if (now - parseInt(lastActivity) > autoLogoutTime) {
-            logout(); // Use the logout from useAuth
+            logout();
             toast.error("Session expired due to inactivity. Please login again.");
             setLocation('/login');
           }
@@ -153,7 +159,6 @@ function App() {
       window.addEventListener('click', updateActivity);
       window.addEventListener('scroll', updateActivity);
     } else {
-      // Clear any existing interval or listeners if not authenticated
       if (interval) clearInterval(interval);
       window.removeEventListener('mousemove', updateActivity);
       window.removeEventListener('keydown', updateActivity);
@@ -168,7 +173,7 @@ function App() {
       window.removeEventListener('click', updateActivity);
       window.removeEventListener('scroll', updateActivity);
     };
-  }, [isAuthenticated, autoLogoutTime, setLocation, logout]);
+  }, [isAuthenticated, loading, autoLogoutTime, setLocation, logout]);
 
   return (
     <ErrorBoundary>

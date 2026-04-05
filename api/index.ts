@@ -22,6 +22,30 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── CORS middleware ───────────────────────────────────────────────────────────
+// Allow the frontend origin (same-origin on Vercel, but explicit for safety)
+// and ensure credentials (cookies) are forwarded on cross-origin requests.
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, x-trpc-source"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, OPTIONS"
+    );
+  }
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
 // Stripe webhook handler (must be before JSON parsing for signature verification)
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req, res, next) => {
   try {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpcVanilla as trpc } from "@/lib/trpcVanilla";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +30,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [, setLocation] = useLocation();
+  const { refresh } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +55,11 @@ export default function Login() {
           localStorage.setItem('session_token', (result as any).sessionToken);
         }
         toast.success("Login successful!");
-        
+
+        // Refresh auth state so ProtectedRoute sees the authenticated user
+        // before we navigate, preventing an immediate redirect back to /login.
+        await refresh();
+
         // Redirect based on role
         const targetPath = ROLE_ROUTES[result.role] || "/dashboard/cafeteria-admin";
         setLocation(targetPath);

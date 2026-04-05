@@ -34,9 +34,39 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchUser = useCallback(async () => {
+    // Reset to loading state on every explicit refresh call
+    setState(prev => ({ ...prev, loading: true }));
+
+    // Clear any existing timeout before starting a new fetch
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+
+    // Set a safety-net timeout: if the me query doesn't resolve within 10 s,
+    // force the loading state to false so the UI doesn't hang forever.
+    refreshTimeoutRef.current = setTimeout(() => {
+      setState(prev => {
+        if (prev.loading) {
+          console.warn("Auth loading timeout - forcing unauthenticated");
+          return {
+            ...prev,
+            loading: false,
+            isUnauthenticated: true,
+          };
+        }
+        return prev;
+      });
+    }, 10000);
+
     try {
       // Use authSupabase.me instead of auth.me
       const result = await trpc.authSupabase.me.query();
+
+      // Cancel the timeout — we got a result in time
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
 
       if (result) {
         const user: AuthUser = {
@@ -68,6 +98,12 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
         });
       }
     } catch (err: any) {
+      // Cancel the timeout on error too
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+
       // Don't log error for 401/unauthorized as it's expected when not logged in
       if (err.shape?.code !== -32001 && err.data?.code !== "UNAUTHORIZED") {
         console.error("Error in useAuth fetchUser:", err);
@@ -83,18 +119,6 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
   }, []);
 
   useEffect(() => {
-    // Set a timeout to force loading to false if it takes too long
-    refreshTimeoutRef.current = setTimeout(() => {
-      if (state.loading) {
-        console.warn("Auth loading timeout - forcing completion");
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          isUnauthenticated: true,
-        }));
-      }
-    }, 5000);
-
     fetchUser();
 
     // Supabase auth listener is disabled — backend session cookie is used instead.
@@ -138,6 +162,10 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
       console.error("Logout error:", err);
     }
 
+    // Clear session token from localStorage
+    localStorage.removeItem("session_token");
+    localStorage.removeItem("last_activity");
+
     setState({
       user: null,
       loading: false,
@@ -145,9 +173,6 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
       isAuthenticated: false,
       isUnauthenticated: true,
     });
-
-    // Clear last activity
-    localStorage.removeItem("last_activity");
   }, []);
 
   return {

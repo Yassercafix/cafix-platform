@@ -13,6 +13,22 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
+      fetch(input, init) {
+        // Always include cookies so the backend can read app_session_id
+        const sessionToken =
+          typeof window !== "undefined"
+            ? localStorage.getItem("session_token")
+            : null;
+        const headers = new Headers(init?.headers);
+        if (sessionToken) {
+          headers.set("Authorization", `Bearer ${sessionToken}`);
+        }
+        return globalThis.fetch(input, {
+          ...(init ?? {}),
+          headers,
+          credentials: "include",
+        });
+      },
     }),
   ],
 });
