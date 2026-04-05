@@ -1,0 +1,1 @@
+ALTER TABLE "cafeterias" ALTER COLUMN "subscriptionPlan" SET DEFAULT 'starter';

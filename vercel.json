@@ -1,0 +1,11 @@
+{
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.ts" },
+    { "src": "/assets/(.*)", "dest": "/assets/$1" },
+    {
+      "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|map|webp|avif))",
+      "dest": "/$1"
+    },
+    { "src": "/((?!api/).*)", "dest": "/index.html" }
+  ]
+}
