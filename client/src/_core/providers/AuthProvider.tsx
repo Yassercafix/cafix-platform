@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
  */
 async function buildUser(supabaseUser: any): Promise<AuthUser> {
   const meta = supabaseUser.user_metadata ?? {};
-  
+
   return {
     id: supabaseUser.id,
     email: supabaseUser.email,
@@ -45,7 +45,11 @@ interface AuthProviderProps {
 
 /**
  * AuthProvider component that wraps the application and provides authentication context
- * to all child components via useAuth hook
+ * to all child components via useAuth hook.
+ *
+ * When VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are absent the Supabase client is
+ * null (see supabaseClient.ts). All Supabase calls are guarded so the app continues
+ * gracefully and the backend-based owner bypass login still works.
  */
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthContextType>({
@@ -61,9 +65,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const refresh = useCallback(async () => {
+    // If Supabase client is not available, skip and mark as unauthenticated
+    if (!supabase) {
+      setState(prev => ({
+        ...prev,
+        user: null,
+        loading: false,
+        error: null,
+        isAuthenticated: false,
+        isUnauthenticated: true,
+      }));
+      return;
+    }
+
     try {
       const { data, error } = await supabase.auth.getUser();
-      
+
       if (error || !data.user) {
         setState(prev => ({
           ...prev,
@@ -101,7 +118,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
     }
-    await supabase.auth.signOut();
+    // Guard: only call signOut when Supabase client is available
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     setState(prev => ({
       ...prev,
       user: null,
@@ -130,12 +150,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     refresh();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Guard: only subscribe to auth state changes when Supabase client is available
+    if (!supabase) {
+      return () => {
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+        }
+      };
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
       try {
         if (refreshTimeoutRef.current) {
           clearTimeout(refreshTimeoutRef.current);
         }
-        
+
         if (session?.user) {
           const user = await buildUser(session.user);
           setState(prev => ({

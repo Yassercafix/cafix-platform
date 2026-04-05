@@ -37,7 +37,7 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
     try {
       // Use authSupabase.me instead of auth.me
       const result = await trpc.authSupabase.me.query();
-      
+
       if (result) {
         const user: AuthUser = {
           id: result.id,
@@ -97,7 +97,8 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
 
     fetchUser();
 
-    // Local test bypass: disable Supabase auth listener
+    // Supabase auth listener is disabled — backend session cookie is used instead.
+    // Keeping this commented out to avoid crashing when Supabase env vars are absent.
     /*
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -127,14 +128,16 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
       clearTimeout(refreshTimeoutRef.current);
     }
     try {
-      // Call Supabase logout via tRPC to clear cookies and Supabase session
+      // Call backend logout to clear session cookie
       await trpc.authSupabase.logout.mutate();
-      // Also clear Supabase client session just in case
-      await supabase.auth.signOut();
+      // Guard: only call Supabase signOut when client is available
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
     } catch (err) {
       console.error("Logout error:", err);
     }
-    
+
     setState({
       user: null,
       loading: false,
@@ -142,7 +145,7 @@ export function useAuth(options?: { redirectOnUnauthenticated?: boolean }) {
       isAuthenticated: false,
       isUnauthenticated: true,
     });
-    
+
     // Clear last activity
     localStorage.removeItem("last_activity");
   }, []);
