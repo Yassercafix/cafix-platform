@@ -27,12 +27,14 @@ let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 function getJwks() {
   if (!_jwks && supabaseUrl) {
     try {
-      _jwks = createRemoteJWKSet(
-        new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
-      );
+      const jwksUrl = `${supabaseUrl}/auth/v1/.well-known/jwks.json`;
+      console.log("[context] Creating JWKS set from:", jwksUrl);
+      _jwks = createRemoteJWKSet(new URL(jwksUrl));
     } catch (e) {
       console.error("[context] Failed to create JWKS set:", e);
     }
+  } else if (!supabaseUrl) {
+    console.error("[context] SUPABASE_URL is missing, cannot create JWKS set");
   }
   return _jwks;
 }
@@ -42,15 +44,17 @@ function getJwks() {
  * Tries JWKS (ES256) first, then falls back to HS256 secret if configured.
  */
 async function verifySupabaseToken(token: string): Promise<any> {
+  console.log("[context] Verifying token (length):", token?.length);
   // ── Primary: JWKS / ES256 ──────────────────────────────────────────────────
   const jwks = getJwks();
   if (jwks) {
     try {
       const { payload } = await jwtVerify(token, jwks);
+      console.log("[context] JWKS verification success for:", payload.email);
       return payload;
     } catch (e: any) {
       // If JWKS verification fails, fall through to HS256 attempt
-      console.warn("[context] JWKS verification failed, trying HS256:", e?.message);
+      console.warn("[context] JWKS verification failed:", e?.message);
     }
   }
 
