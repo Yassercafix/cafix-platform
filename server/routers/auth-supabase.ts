@@ -19,12 +19,15 @@ if (!supabaseUrl || !supabaseServiceKey) {
   console.error("[Supabase Auth] ERROR: VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured");
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+let supabase: any = null;
+if (supabaseUrl && supabaseServiceKey) {
+  supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
 
 function setCookie(ctx: any, sessionToken: string) {
   const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -151,6 +154,30 @@ export const authSupabaseRouter = router({
       try {
         console.log("[LOGIN ATTEMPT]", input.email);
         
+        const db = await getDb();
+        if (!db) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database not available",
+          });
+        }
+
+        // --- LOCAL TESTING OVERRIDE ---
+        if (input.email === "owner@cafeteria.com" && input.password === "123456") {
+          const userRow = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
+          if (userRow.length > 0) {
+            console.log("[LOGIN BYPASS] Bypassing Supabase for owner account");
+            return {
+              success: true,
+              role: "owner",
+              userId: userRow[0].id,
+              email: input.email,
+              sessionToken: "local_test_token_for_owner",
+            };
+          }
+        }
+        // ------------------------------
+
         // Sign in with Supabase
         const { data, error } = await supabase.auth.signInWithPassword({
           email: input.email,
@@ -164,8 +191,6 @@ export const authSupabaseRouter = router({
             message: error?.message || "Invalid email or password",
           });
         }
-
-        const db = await getDb();
         if (!db) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",

@@ -42,8 +42,11 @@ let _pool: Pool | null = null;
 
 export async function getDb() {
   if (!_db) {
-    if (!ENV.databaseUrl) {
-      throw new Error('[Database] DATABASE_URL is not configured - cannot connect to database');
+    if (!ENV.databaseUrl || ENV.databaseUrl.includes('sqlite') || ENV.databaseUrl.includes('file:')) {
+      console.log('[Database] Using local SQLite database');
+      const { getDb: getSqliteDb } = await import('./db-sqlite.js');
+      _db = await getSqliteDb();
+      return _db;
     }
     
     try {
