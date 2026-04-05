@@ -47,9 +47,8 @@ interface AuthProviderProps {
  * AuthProvider component that wraps the application and provides authentication context
  * to all child components via useAuth hook.
  *
- * When VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are absent the Supabase client is
- * null (see supabaseClient.ts). All Supabase calls are guarded so the app continues
- * gracefully and the backend-based owner bypass login still works.
+ * Uses Supabase Auth for real authentication. All Supabase calls are guarded
+ * to ensure the app continues gracefully if Supabase client initialization fails.
  */
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthContextType>({

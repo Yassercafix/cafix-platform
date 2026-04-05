@@ -42,11 +42,8 @@ let _pool: Pool | null = null;
 
 export async function getDb() {
   if (!_db) {
-    if (!ENV.databaseUrl || ENV.databaseUrl.includes('sqlite') || ENV.databaseUrl.includes('file:')) {
-      console.log('[Database] Using local SQLite database');
-      const { getDb: getSqliteDb } = await import('./db-sqlite.js');
-      _db = await getSqliteDb();
-      return _db;
+    if (!ENV.databaseUrl) {
+      throw new Error('[Database] CRITICAL: DATABASE_URL is required for Supabase PostgreSQL connection');
     }
     
     try {
@@ -54,11 +51,11 @@ export async function getDb() {
         _pool = new Pool({
           connectionString: ENV.databaseUrl,
         });
-        console.log('[Database] Connected to PostgreSQL database');
+        console.log('[Database] Connected to Supabase PostgreSQL database');
       }
       _db = drizzle(_pool, { schema });
     } catch (error) {
-      console.error('[Database] Failed to connect to PostgreSQL:', error);
+      console.error('[Database] Failed to connect to Supabase PostgreSQL:', error);
       throw error;
     }
   }

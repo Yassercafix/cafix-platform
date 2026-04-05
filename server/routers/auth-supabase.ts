@@ -154,6 +154,13 @@ export const authSupabaseRouter = router({
       try {
         console.log("[LOGIN ATTEMPT]", input.email);
         
+        if (!supabase) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Supabase is not configured. Please set VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.",
+          });
+        }
+
         const db = await getDb();
         if (!db) {
           throw new TRPCError({
@@ -161,42 +168,6 @@ export const authSupabaseRouter = router({
             message: "Database not available",
           });
         }
-
-        // --- LOCAL TESTING OVERRIDE ---
-        if (input.email === "owner@cafeteria.com" && input.password === "123456") {
-          let userRow = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
-          
-          if (userRow.length === 0) {
-            console.log("[LOGIN BYPASS] Creating missing owner account");
-            const userId = "owner_test_id_" + Math.random().toString(36).substring(7);
-            await db.insert(users).values({
-              id: userId,
-              openId: "owner_bypass_openid",
-              name: "System Owner",
-              email: input.email,
-              loginUsername: input.email,
-              passwordHash: await bcryptjs.hash(input.password, 10),
-              role: "owner",
-              loginMethod: "email",
-              referenceCode: "10",
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            });
-            userRow = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
-          }
-
-          if (userRow.length > 0) {
-            console.log("[LOGIN BYPASS] Bypassing Supabase for owner account");
-            return {
-              success: true,
-              role: "owner",
-              userId: userRow[0].id,
-              email: input.email,
-              sessionToken: "local_test_token_for_owner",
-            };
-          }
-        }
-        // ------------------------------
 
         // Sign in with Supabase
         const { data, error } = await supabase.auth.signInWithPassword({

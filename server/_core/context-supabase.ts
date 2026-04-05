@@ -136,25 +136,7 @@ export async function createContextSupabase(
       sessionToken = opts.req.headers.authorization.split(" ")[1];
     }
 
-    // --- LOCAL TESTING OVERRIDE ---
-    if (sessionToken === "local_test_token_for_owner") {
-      const db = await getDb();
-      const owner = await db.select().from(users).where(eq(users.email, "owner@cafeteria.com")).limit(1);
-      if (owner.length > 0) {
-        return {
-          req: opts.req,
-          res: opts.res,
-          user: {
-            id: owner[0].id,
-            role: "owner",
-            email: owner[0].email,
-            name: owner[0].name,
-            referenceCode: owner[0].referenceCode,
-          },
-        };
-      }
-    }
-    // ------------------------------
+
 
     if (!sessionToken) {
       // No session token, user is not authenticated
