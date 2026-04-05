@@ -164,7 +164,27 @@ export const authSupabaseRouter = router({
 
         // --- LOCAL TESTING OVERRIDE ---
         if (input.email === "owner@cafeteria.com" && input.password === "123456") {
-          const userRow = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
+          let userRow = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
+          
+          if (userRow.length === 0) {
+            console.log("[LOGIN BYPASS] Creating missing owner account");
+            const userId = "owner_test_id_" + Math.random().toString(36).substring(7);
+            await db.insert(users).values({
+              id: userId,
+              openId: "owner_bypass_openid",
+              name: "System Owner",
+              email: input.email,
+              loginUsername: input.email,
+              passwordHash: await bcryptjs.hash(input.password, 10),
+              role: "owner",
+              loginMethod: "email",
+              referenceCode: "10",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+            userRow = await db.select().from(users).where(eq(users.email, input.email)).limit(1);
+          }
+
           if (userRow.length > 0) {
             console.log("[LOGIN BYPASS] Bypassing Supabase for owner account");
             return {
