@@ -238,6 +238,48 @@ export const marketersRouter = router({
   /**
    * Get marketer hierarchy information
    */
+  /**
+   * List all marketers (only for owner)
+   */
+  listMarketers: adminProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      // Only the owner can list all marketers
+      if (ctx.user?.role !== "owner") {
+        throw new Error("Only the owner can list all marketers");
+      }
+
+      const allMarketers = await db
+        .select()
+        .from(marketers)
+        .order(marketers.createdAt, { ascending: false });
+
+      return allMarketers;
+    }),
+
+  /**
+   * List all cafeterias (only for owner)
+   */
+  listCafeterias: adminProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      // Only the owner can list all cafeterias
+      if (ctx.user?.role !== "owner") {
+        throw new Error("Only the owner can list all cafeterias");
+      }
+
+      const allCafeterias = await db
+        .select()
+        .from(cafeterias)
+        .order(cafeterias.createdAt, { ascending: false });
+
+      return allCafeterias;
+    }),
+
   getMarketerHierarchy: marketerProcedure
     .input(z.object({ marketerCode: z.string() }))
     .query(async ({ input }) => {

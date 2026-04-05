@@ -88,23 +88,30 @@ export default function OwnerMarketers() {
     { label: isRTL ? 'الإعدادات' : 'Settings', path: '/dashboard/owner/settings', icon: <Settings className="w-5 h-5" /> },
   ];
 
-  const fetchMarketers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('marketers')
-        .select('*')
-        .order('createdAt', { ascending: false });
+  const listMarketersQuery = trpc.marketers.listMarketers.useQuery(undefined, {
+    enabled: !authLoading,
+  });
 
-      if (error) throw error;
-      setMarketers(data || []);
-    } catch (err: any) {
-      console.error('Error fetching marketers:', err);
-      toast.error(isRTL ? 'خطأ في تحميل المسوقين' : 'Error loading marketers');
-    } finally {
-      setLoading(false);
+  const fetchMarketers = useCallback(async () => {
+    listMarketersQuery.refetch();
+  }, [listMarketersQuery]);
+
+  useEffect(() => {
+    if (listMarketersQuery.data) {
+      setMarketers(listMarketersQuery.data as any);
     }
-  }, [isRTL]);
+  }, [listMarketersQuery.data]);
+
+  useEffect(() => {
+    setLoading(listMarketersQuery.isLoading);
+  }, [listMarketersQuery.isLoading]);
+
+  useEffect(() => {
+    if (listMarketersQuery.error) {
+      console.error('Error fetching marketers:', listMarketersQuery.error);
+      toast.error(isRTL ? 'خطأ في تحميل المسوقين' : 'Error loading marketers');
+    }
+  }, [listMarketersQuery.error, isRTL]);
 
   useEffect(() => {
     if (!authLoading) {

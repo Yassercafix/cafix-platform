@@ -103,23 +103,30 @@ export default function OwnerCafeterias() {
     { label: isRTL ? 'الإعدادات' : 'Settings', path: '/dashboard/owner/settings', icon: <Settings className="w-5 h-5" /> },
   ];
 
-  const fetchCafeterias = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('cafeterias')
-        .select('*')
-        .order('createdAt', { ascending: false });
+  const listCafeteriasQuery = trpc.marketers.listCafeterias.useQuery(undefined, {
+    enabled: !authLoading,
+  });
 
-      if (error) throw error;
-      setCafeterias(data || []);
-    } catch (err: any) {
-      console.error('Error fetching cafeterias:', err);
-      toast.error(isRTL ? 'خطأ في تحميل الكافيتريات' : 'Error loading cafeterias');
-    } finally {
-      setLoading(false);
+  const fetchCafeterias = useCallback(async () => {
+    listCafeteriasQuery.refetch();
+  }, [listCafeteriasQuery]);
+
+  useEffect(() => {
+    if (listCafeteriasQuery.data) {
+      setCafeterias(listCafeteriasQuery.data as any);
     }
-  }, [isRTL]);
+  }, [listCafeteriasQuery.data]);
+
+  useEffect(() => {
+    setLoading(listCafeteriasQuery.isLoading);
+  }, [listCafeteriasQuery.isLoading]);
+
+  useEffect(() => {
+    if (listCafeteriasQuery.error) {
+      console.error('Error fetching cafeterias:', listCafeteriasQuery.error);
+      toast.error(isRTL ? 'خطأ في تحميل الكافيتريات' : 'Error loading cafeterias');
+    }
+  }, [listCafeteriasQuery.error, isRTL]);
 
   useEffect(() => {
     if (!authLoading) {
