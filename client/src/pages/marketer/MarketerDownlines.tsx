@@ -14,7 +14,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Users, LayoutDashboard, Wallet, BarChart3, Plus, Store, Hash, Globe, Mail, Phone, ShieldCheck, UserPlus, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
-import { getMarketerDepth } from '@/../../server/utils/referenceCodeGenerator';
+// Inlined from server/utils/referenceCodeGenerator.ts (pure function — no server deps)
+const OWNER_REFERENCE_CODE = "10";
+function getMarketerDepth(code: string): number {
+  if (code === OWNER_REFERENCE_CODE) return 0;
+  const extra = code.length - OWNER_REFERENCE_CODE.length;
+  return extra / 2;
+}
 
 interface SubMarketer {
   id: string;
