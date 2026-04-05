@@ -73,7 +73,8 @@ export function AddMarketerDialog({ open, onOpenChange, onSuccess, isOwner = fal
     setSubmitting(true);
     try {
       if (isOwner) {
-        await (trpc.marketers.createLevel1Marketer as any).mutate({
+        // Owner creates a level 1 marketer directly
+        await trpc.marketers.createLevel1Marketer.mutate({
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
           loginUsername: formData.email.trim().toLowerCase(),
@@ -84,11 +85,11 @@ export function AddMarketerDialog({ open, onOpenChange, onSuccess, isOwner = fal
         });
       } else {
         // For non-owner (child marketer), we need parent's reference code
-        const me = await (trpc.authSupabase.me as any).query();
-        if (!me?.user?.referenceCode) throw new Error("Parent reference code not found");
+        const me = await trpc.authSupabase.me.query();
+        if (!me?.referenceCode) throw new Error(isRTL ? 'لم يتم العثور على الرمز المرجعي للمسوق الأب' : 'Parent reference code not found');
 
-        await (trpc.marketers.createChildMarketer as any).mutate({
-          parentMarketerCode: me.user.referenceCode,
+        await trpc.marketers.createChildMarketer.mutate({
+          parentMarketerCode: me.referenceCode,
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
           loginUsername: formData.email.trim().toLowerCase(),
@@ -102,7 +103,8 @@ export function AddMarketerDialog({ open, onOpenChange, onSuccess, isOwner = fal
       if (onSuccess) onSuccess();
     } catch (err: any) {
       console.error('Add marketer error:', err);
-      toast.error(err.message || (isRTL ? 'خطأ في إضافة المسوق' : 'Error adding marketer'));
+      const errorMsg = err?.data?.message || err?.message || (isRTL ? 'خطأ في إضافة المسوق' : 'Error adding marketer');
+      toast.error(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -125,16 +127,29 @@ export function AddMarketerDialog({ open, onOpenChange, onSuccess, isOwner = fal
         </DialogHeader>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
           <div className="space-y-2">
-            <Label>{isRTL ? 'الاسم الكامل' : 'Full Name'}</Label>
-            <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Marketer Name" />
+            <Label>{isRTL ? 'الاسم الكامل *' : 'Full Name *'}</Label>
+            <Input 
+              value={formData.name} 
+              onChange={e => setFormData({...formData, name: e.target.value})} 
+              placeholder={isRTL ? 'اسم المسوق' : 'Marketer Name'} 
+            />
           </div>
           <div className="space-y-2">
-            <Label>{isRTL ? 'البريد الإلكتروني' : 'Email'}</Label>
-            <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="email@example.com" />
+            <Label>{isRTL ? 'البريد الإلكتروني *' : 'Email *'}</Label>
+            <Input 
+              value={formData.email} 
+              onChange={e => setFormData({...formData, email: e.target.value})} 
+              placeholder="email@example.com" 
+            />
           </div>
           <div className="space-y-2">
-            <Label>{isRTL ? 'كلمة المرور' : 'Password'}</Label>
-            <Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="******" />
+            <Label>{isRTL ? 'كلمة المرور * (8 أحرف على الأقل)' : 'Password * (at least 8 characters)'}</Label>
+            <Input 
+              type="password" 
+              value={formData.password} 
+              onChange={e => setFormData({...formData, password: e.target.value})} 
+              placeholder="********" 
+            />
           </div>
 
           {isOwner && (
@@ -172,8 +187,9 @@ export function AddMarketerDialog({ open, onOpenChange, onSuccess, isOwner = fal
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-          <Button onClick={handleAddMarketer} disabled={submitting} className="bg-purple-600">
-            {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : (isRTL ? 'حفظ' : 'Save')}
+          <Button onClick={handleAddMarketer} disabled={submitting} className="bg-purple-600 hover:bg-purple-700">
+            {submitting ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+            {isRTL ? 'حفظ' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

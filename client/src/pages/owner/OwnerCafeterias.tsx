@@ -16,10 +16,9 @@ import {
   Store, LayoutDashboard, Users, Wallet, BarChart3, Settings,
   Plus, Edit, Trash2, Eye, RefreshCw, ArrowLeft, Home, AlertCircle, Globe, Coins, Languages, MapPin, Search
 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
-import bcryptjs from 'bcryptjs';
 import { trpc } from '@/lib/trpc';
+import { trpcVanilla } from '@/lib/trpcVanilla';
 
 interface Cafeteria {
   id: string;
@@ -61,7 +60,6 @@ export default function OwnerCafeterias() {
   const [selectedCafeteria, setSelectedCafeteria] = useState<Cafeteria | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [countrySearch, setCountrySearch] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -153,83 +151,38 @@ export default function OwnerCafeterias() {
     }
 
     if (!formData.loginUsername.trim()) {
-      toast.error(isRTL ? 'بريد إلكتروني مطلوب' : 'Email is required');
+      toast.error(isRTL ? 'البريد الإلكتروني مطلوب' : 'Email is required');
       return;
     }
 
     if (formData.password.length < 6) {
-      toast.error(isRTL ? 'كلمة المرور قصيرة جداً' : 'Password too short');
+      toast.error(isRTL ? 'كلمة المرور قصيرة جداً (6 أحرف على الأقل)' : 'Password too short (at least 6 characters)');
       return;
     }
 
     setSubmitting(true);
     try {
-      let parentRefCode = '10';
-      let marketerId = 'owner';
-      
-      const isSystemOwner = user?.email === 'owner@cafeteria.com' || user?.role === 'owner';
-      
-      if (!isSystemOwner) {
-        const { data: marketer } = await supabase
-          .from('marketers')
-          .select('id, referenceCode, country, currency, language')
-          .eq('email', user?.email)
-          .single();
-        
-        if (marketer) {
-          parentRefCode = marketer.referenceCode;
-          marketerId = marketer.id;
-          formData.country = marketer.country;
-          formData.currency = marketer.currency;
-          formData.language = marketer.language;
-        }
-      }
-
-      const { data: existing } = await supabase
-        .from('cafeterias')
-        .select('referenceCode')
-        .like('referenceCode', `${parentRefCode}P%`)
-        .order('referenceCode', { ascending: false })
-        .limit(1);
-      
-      let nextNum = 1;
-      if (existing && existing.length > 0 && existing[0].referenceCode) {
-        const lastCode = existing[0].referenceCode;
-        const match = lastCode.match(/P(\d+)$/);
-        if (match) nextNum = parseInt(match[1]) + 1;
-      }
-      const newRefCode = `${parentRefCode}P${String(nextNum).padStart(2, '0')}`;
-
-      const salt = await bcryptjs.genSalt(10);
-      const hashedPassword = await bcryptjs.hash(formData.password, salt);
-
-      const insertData: any = {
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+      // Use tRPC mutation - the server will handle finding the right marketer code
+      // For owner, we pass '10' as the default marketer code and the server handles it
+      await trpcVanilla.marketers.createCafeteria.mutate({
+        marketerCode: '10', // Owner's default - server will find the first available marketer
         name: formData.name.trim(),
         location: formData.location.trim() || null,
         loginUsername: formData.loginUsername.trim().toLowerCase(),
-        passwordHash: hashedPassword,
-        marketerId,
-        referenceCode: newRefCode,
+        passwordHash: formData.password,
         country: formData.country,
         currency: formData.currency,
         language: formData.language,
-        pointsBalance: 0,
-        subscriptionStatus: 'active',
-        status: 'active',
-        createdAt: new Date().toISOString(),
-      };
+      });
 
-      const { error } = await supabase.from('cafeterias').insert([insertData]);
-      if (error) throw error;
-      
       toast.success(isRTL ? 'تم إضافة الكافيتريا بنجاح' : 'Cafeteria added successfully');
       setShowAddDialog(false);
       setFormData({ name: '', location: '', loginUsername: '', password: '', country: 'SA', currency: 'SAR', language: 'ar' });
       fetchCafeterias();
     } catch (err: any) {
       console.error('Add cafeteria error:', err);
-      toast.error(err.message || (isRTL ? 'خطأ في إضافة الكافيتريا' : 'Error adding cafeteria'));
+      const errorMsg = err?.data?.message || err?.message || (isRTL ? 'خطأ في إضافة الكافيتريا' : 'Error adding cafeteria');
+      toast.error(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -353,22 +306,44 @@ export default function OwnerCafeterias() {
         </Card>
       </main>
 
-      {/* Add Dialog Simplified */}
+      {/* Add Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{isRTL ? 'إضافة كافيتريا جديدة' : 'Add New Cafeteria'}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>{isRTL ? 'اسم الكافيتريا' : 'Cafeteria Name'}</Label>
-              <Input value={formData.name} onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} />
+              <Label>{isRTL ? 'اسم الكافيتريا *' : 'Cafeteria Name *'}</Label>
+              <Input 
+                value={formData.name} 
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} 
+                placeholder={isRTL ? 'أدخل اسم الكافيتريا' : 'Enter cafeteria name'}
+              />
             </div>
             <div className="space-y-2">
-              <Label>{isRTL ? 'البريد الإلكتروني' : 'Email Address'}</Label>
-              <Input type="email" value={formData.loginUsername} onChange={(e) => setFormData(prev => ({ ...prev, loginUsername: e.target.value }))} />
+              <Label>{isRTL ? 'الموقع (اختياري)' : 'Location (optional)'}</Label>
+              <Input 
+                value={formData.location} 
+                onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))} 
+                placeholder={isRTL ? 'أدخل الموقع' : 'Enter location'}
+              />
             </div>
             <div className="space-y-2">
-              <Label>{isRTL ? 'كلمة المرور' : 'Password'}</Label>
-              <Input type="password" value={formData.password} onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))} />
+              <Label>{isRTL ? 'البريد الإلكتروني (للدخول) *' : 'Email (for login) *'}</Label>
+              <Input 
+                type="email" 
+                value={formData.loginUsername} 
+                onChange={(e) => setFormData(prev => ({ ...prev, loginUsername: e.target.value }))} 
+                placeholder="cafeteria@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{isRTL ? 'كلمة المرور *' : 'Password *'}</Label>
+              <Input 
+                type="password" 
+                value={formData.password} 
+                onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))} 
+                placeholder={isRTL ? '6 أحرف على الأقل' : 'At least 6 characters'}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -383,13 +358,16 @@ export default function OwnerCafeterias() {
               </div>
               <div className="space-y-2">
                 <Label>{isRTL ? 'العملة' : 'Currency'}</Label>
-                <Input value={formData.currency} disabled />
+                <Input value={formData.currency} disabled className="bg-slate-50" />
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-            <Button onClick={handleAddCafeteria} disabled={submitting}>{isRTL ? 'حفظ' : 'Save'}</Button>
+            <Button onClick={handleAddCafeteria} disabled={submitting} className="bg-blue-600 hover:bg-blue-700">
+              {submitting ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+              {isRTL ? 'حفظ' : 'Save'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

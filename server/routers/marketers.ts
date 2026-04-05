@@ -4,8 +4,8 @@
  */
 
 import { z } from "zod";
-import { protectedProcedure, adminProcedure, marketerProcedure, router } from "../_core/trpc.js";
-import { eq, and } from "drizzle-orm";
+import { protectedProcedure, adminProcedure, ownerOrMarketerProcedure, router } from "../_core/trpc.js";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb, getMarketerBalance } from "../db.js";
 import { marketers, cafeterias, systemConfigs, freeOperationPeriods } from "../../drizzle/schema.js";
@@ -16,10 +16,27 @@ import {
   getMarketerDepth,
   EntityType,
 } from "../utils/referenceCodeGenerator.js";
+import { createClient } from "@supabase/supabase-js";
+import bcryptjs from "bcryptjs";
+
+// Initialize Supabase admin client for creating auth accounts
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+let supabaseAdmin: any = null;
+if (supabaseUrl && supabaseServiceKey) {
+  supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
 
 export const marketersRouter = router({
   /**
    * Create a new level 1 marketer (only for owner)
+   * Also creates a Supabase Auth account so the marketer can login
    */
   createLevel1Marketer: adminProcedure
     .input(
@@ -42,22 +59,70 @@ export const marketersRouter = router({
         throw new Error("Only the owner can create level 1 marketers");
       }
 
-      const referenceCode = await generateInitialReferenceCode(EntityType.MARKETER);
+      // Check if email already exists in marketers table
+      const existingMarketer = await db
+        .select()
+        .from(marketers)
+        .where(eq(marketers.loginUsername, input.loginUsername))
+        .limit(1);
 
+      if (existingMarketer.length > 0) {
+        throw new Error(`A marketer with email ${input.loginUsername} already exists`);
+      }
+
+      // Hash the password for storage in our DB
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(input.passwordHash, salt);
+
+      const referenceCode = await generateInitialReferenceCode(EntityType.MARKETER);
       const id = nanoid();
 
+      // Insert marketer into our database first
       await db.insert(marketers).values({
         id,
         name: input.name,
-        email: input.email,
+        email: input.email || input.loginUsername,
         loginUsername: input.loginUsername,
-        passwordHash: input.passwordHash,
+        passwordHash: hashedPassword,
         referenceCode,
         country: input.country,
         currency: input.currency,
         language: input.language || "en",
         createdAt: new Date(),
       });
+
+      // Create Supabase Auth account so the marketer can login
+      if (supabaseAdmin) {
+        try {
+          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: input.loginUsername,
+            password: input.passwordHash,
+            email_confirm: true,
+            user_metadata: {
+              name: input.name,
+              role: "marketer",
+              referenceCode,
+            },
+          });
+
+          if (authError) {
+            // If Supabase Auth user already exists, that's OK - just log it
+            if (authError.message?.includes("already been registered") || authError.message?.includes("already exists")) {
+              console.log(`[createLevel1Marketer] Supabase Auth user already exists for ${input.loginUsername}, skipping auth creation`);
+            } else {
+              console.error(`[createLevel1Marketer] Failed to create Supabase Auth user:`, authError.message);
+              // Don't fail the whole operation - the DB record was created
+            }
+          } else {
+            console.log(`[createLevel1Marketer] Created Supabase Auth user for ${input.loginUsername}`);
+          }
+        } catch (authErr: any) {
+          console.error(`[createLevel1Marketer] Supabase Auth error:`, authErr.message);
+          // Don't fail - DB record was created
+        }
+      } else {
+        console.warn("[createLevel1Marketer] Supabase admin client not available, skipping auth account creation");
+      }
 
       return {
         id,
@@ -68,8 +133,9 @@ export const marketersRouter = router({
 
   /**
    * Create a child marketer under an existing marketer
+   * Also creates a Supabase Auth account so the child marketer can login
    */
-  createChildMarketer: marketerProcedure
+  createChildMarketer: ownerOrMarketerProcedure
     .input(
       z.object({
         parentMarketerCode: z.string(),
@@ -99,6 +165,17 @@ export const marketersRouter = router({
         throw new Error(`Marketer at level ${parentDepth} cannot create child marketers (level 3 is the limit)`);
       }
 
+      // Check if email already exists
+      const existingMarketer = await db
+        .select()
+        .from(marketers)
+        .where(eq(marketers.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingMarketer.length > 0) {
+        throw new Error(`A marketer with email ${input.loginUsername} already exists`);
+      }
+
       // Generate child reference code
       const childReferenceCode = await generateChildReferenceCode(
         input.parentMarketerCode,
@@ -112,12 +189,16 @@ export const marketersRouter = router({
       const currency = parentMarketer[0].currency;
       const language = parentMarketer[0].language || "en";
 
+      // Hash the password
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(input.passwordHash, salt);
+
       await db.insert(marketers).values({
         id,
         name: input.name,
-        email: input.email,
+        email: input.email || input.loginUsername,
         loginUsername: input.loginUsername,
-        passwordHash: input.passwordHash,
+        passwordHash: hashedPassword,
         parentId: parentMarketer[0].id,
         referenceCode: childReferenceCode,
         country,
@@ -125,6 +206,28 @@ export const marketersRouter = router({
         language,
         createdAt: new Date(),
       });
+
+      // Create Supabase Auth account
+      if (supabaseAdmin) {
+        try {
+          const { error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: input.loginUsername,
+            password: input.passwordHash,
+            email_confirm: true,
+            user_metadata: {
+              name: input.name,
+              role: "marketer",
+              referenceCode: childReferenceCode,
+            },
+          });
+
+          if (authError && !authError.message?.includes("already been registered") && !authError.message?.includes("already exists")) {
+            console.error(`[createChildMarketer] Failed to create Supabase Auth user:`, authError.message);
+          }
+        } catch (authErr: any) {
+          console.error(`[createChildMarketer] Supabase Auth error:`, authErr.message);
+        }
+      }
 
       return {
         id,
@@ -136,39 +239,82 @@ export const marketersRouter = router({
 
   /**
    * Create a cafeteria under a marketer
-   * Only son marketers can create cafeterias
+   * Owner can create cafeterias directly (under the first marketer or a specified marketer)
+   * Marketers can also create cafeterias under themselves
+   * Also creates a Supabase Auth account so the cafeteria can login
    */
-  createCafeteria: marketerProcedure
+  createCafeteria: ownerOrMarketerProcedure
     .input(
       z.object({
         marketerCode: z.string(),
         name: z.string(),
-        location: z.string().optional(),
+        location: z.string().optional().nullable(),
         loginUsername: z.string().email(),
         passwordHash: z.string().min(8),
+        country: z.string().optional(),
+        currency: z.string().optional(),
+        language: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
-      // Check if marketer exists
-      const marketer = await db
+      // Check if cafeteria email already exists
+      const existingCafeteria = await db
         .select()
-        .from(marketers)
-        .where(eq(marketers.referenceCode, input.marketerCode));
+        .from(cafeterias)
+        .where(eq(cafeterias.loginUsername, input.loginUsername))
+        .limit(1);
 
-      if (marketer.length === 0) {
-        throw new Error(`Marketer not found: ${input.marketerCode}`);
+      if (existingCafeteria.length > 0) {
+        throw new Error(`A cafeteria with email ${input.loginUsername} already exists`);
       }
 
-      // Any marketer (Level 1, 2, or 3) can create cafeterias.
-      // Reference code engine handles parent validation via isMarketerCode check.
-      // Depth is implicitly capped at 3 for marketers, and cafeterias are leaf nodes.
+      let marketerRecord: any = null;
+      let effectiveMarketerCode = input.marketerCode;
+
+      // If owner is creating a cafeteria, find or use the specified marketer
+      if (ctx.user?.role === "owner") {
+        // Owner can specify any marketer code
+        const marketerRows = await db
+          .select()
+          .from(marketers)
+          .where(eq(marketers.referenceCode, input.marketerCode))
+          .limit(1);
+
+        if (marketerRows.length === 0) {
+          // If no marketer found with that code, try to find the first available marketer
+          const allMarketers = await db
+            .select()
+            .from(marketers)
+            .limit(1);
+
+          if (allMarketers.length === 0) {
+            throw new Error("No marketers found. Please create a marketer first before adding cafeterias.");
+          }
+          marketerRecord = allMarketers[0];
+          effectiveMarketerCode = marketerRecord.referenceCode;
+        } else {
+          marketerRecord = marketerRows[0];
+        }
+      } else {
+        // Marketer creating cafeteria - use their own reference code
+        const marketerRows = await db
+          .select()
+          .from(marketers)
+          .where(eq(marketers.referenceCode, input.marketerCode))
+          .limit(1);
+
+        if (marketerRows.length === 0) {
+          throw new Error(`Marketer not found: ${input.marketerCode}`);
+        }
+        marketerRecord = marketerRows[0];
+      }
 
       // Generate cafeteria reference code
       const cafeteriaReferenceCode = await generateChildReferenceCode(
-        input.marketerCode,
+        effectiveMarketerCode,
         EntityType.CAFETERIA
       );
 
@@ -190,18 +336,22 @@ export const marketersRouter = router({
         freeOperationEndDate.setMonth(freeOperationEndDate.getMonth() + freeMonths);
       }
 
-      // Enforce inheritance from marketer
-      const country = marketer[0].country;
-      const currency = marketer[0].currency;
-      const language = marketer[0].language || "en";
+      // Use provided country/currency/language or inherit from marketer
+      const country = input.country || marketerRecord.country;
+      const currency = input.currency || marketerRecord.currency;
+      const language = input.language || marketerRecord.language || "en";
+
+      // Hash the password
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(input.passwordHash, salt);
 
       await db.insert(cafeterias).values({
         id,
-        marketerId: marketer[0].id,
+        marketerId: marketerRecord.id,
         name: input.name,
-        location: input.location,
+        location: input.location || null,
         loginUsername: input.loginUsername,
-        passwordHash: input.passwordHash,
+        passwordHash: hashedPassword,
         referenceCode: cafeteriaReferenceCode,
         pointsBalance: "0",
         graceMode: false,
@@ -209,8 +359,8 @@ export const marketersRouter = router({
         currency,
         language,
         freeOperationEndDate,
-        subscriptionPlan: "starter", // Default value
-        subscriptionStatus: "active", // Default value
+        subscriptionPlan: "starter",
+        subscriptionStatus: "active",
         createdAt: now,
       });
 
@@ -227,11 +377,35 @@ export const marketersRouter = router({
         });
       }
 
+      // Create Supabase Auth account so the cafeteria can login
+      if (supabaseAdmin) {
+        try {
+          const { error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: input.loginUsername,
+            password: input.passwordHash,
+            email_confirm: true,
+            user_metadata: {
+              name: input.name,
+              role: "cafeteria_admin",
+              referenceCode: cafeteriaReferenceCode,
+            },
+          });
+
+          if (authError && !authError.message?.includes("already been registered") && !authError.message?.includes("already exists")) {
+            console.error(`[createCafeteria] Failed to create Supabase Auth user:`, authError.message);
+          } else if (!authError) {
+            console.log(`[createCafeteria] Created Supabase Auth user for ${input.loginUsername}`);
+          }
+        } catch (authErr: any) {
+          console.error(`[createCafeteria] Supabase Auth error:`, authErr.message);
+        }
+      }
+
       return {
         id,
         name: input.name,
         referenceCode: cafeteriaReferenceCode,
-        marketerCode: input.marketerCode,
+        marketerCode: effectiveMarketerCode,
       };
     }),
 
@@ -280,7 +454,7 @@ export const marketersRouter = router({
       return allCafeterias;
     }),
 
-  getMarketerHierarchy: marketerProcedure
+  getMarketerHierarchy: ownerOrMarketerProcedure
     .input(z.object({ marketerCode: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -348,7 +522,7 @@ export const marketersRouter = router({
   /**
    * Get cafeteria information
    */
-  getCafeteria: marketerProcedure
+  getCafeteria: ownerOrMarketerProcedure
     .input(z.object({ cafeteriaCode: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -402,6 +576,7 @@ export const marketersRouter = router({
       }
       return balance;
     }),
+
   /**
    * Freeze a marketer (owner only)
    * Prevents commission distribution to this marketer and descendants

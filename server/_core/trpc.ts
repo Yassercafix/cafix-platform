@@ -118,6 +118,27 @@ export const marketerProcedure = t.procedure.use(
   }),
 );
 
+/**
+ * Procedure that allows both owner and marketer roles.
+ * Used for operations like creating cafeterias where both roles should have access.
+ */
+export const ownerOrMarketerProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+
+    if (!ctx.user || (ctx.user.role !== 'owner' && ctx.user.role !== 'marketer')) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Owner or Marketer access required." });
+    }
+
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user,
+      },
+    });
+  }),
+);
+
 export const cafeteriaAdminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
