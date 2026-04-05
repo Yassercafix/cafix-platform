@@ -44,7 +44,7 @@ export const marketersRouter = router({
         name: z.string(),
         email: z.string().email().optional(),
         loginUsername: z.string().email(),
-        passwordHash: z.string().min(8),
+        password: z.string().min(8),
         country: z.string().optional(),
         currency: z.string().optional(),
         language: z.string().optional(),
@@ -72,7 +72,7 @@ export const marketersRouter = router({
 
       // Hash the password for storage in our DB
       const salt = await bcryptjs.genSalt(10);
-      const hashedPassword = await bcryptjs.hash(input.passwordHash, salt);
+      const hashedPassword = await bcryptjs.hash(input.password, salt);
 
       const referenceCode = await generateInitialReferenceCode(EntityType.MARKETER);
       const id = nanoid();
@@ -96,7 +96,7 @@ export const marketersRouter = router({
         try {
           const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email: input.loginUsername,
-            password: input.passwordHash,
+            password: input.password,
             email_confirm: true,
             user_metadata: {
               name: input.name,
@@ -142,7 +142,7 @@ export const marketersRouter = router({
         name: z.string(),
         email: z.string().email().optional(),
         loginUsername: z.string().email(),
-        passwordHash: z.string().min(8),
+        password: z.string().min(8),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -191,7 +191,7 @@ export const marketersRouter = router({
 
       // Hash the password
       const salt = await bcryptjs.genSalt(10);
-      const hashedPassword = await bcryptjs.hash(input.passwordHash, salt);
+      const hashedPassword = await bcryptjs.hash(input.password, salt);
 
       await db.insert(marketers).values({
         id,
@@ -212,7 +212,7 @@ export const marketersRouter = router({
         try {
           const { error: authError } = await supabaseAdmin.auth.admin.createUser({
             email: input.loginUsername,
-            password: input.passwordHash,
+            password: input.password,
             email_confirm: true,
             user_metadata: {
               name: input.name,
@@ -250,7 +250,7 @@ export const marketersRouter = router({
         name: z.string(),
         location: z.string().optional().nullable(),
         loginUsername: z.string().email(),
-        passwordHash: z.string().min(8),
+        password: z.string().min(8),
         country: z.string().optional(),
         currency: z.string().optional(),
         language: z.string().optional(),
@@ -299,7 +299,8 @@ export const marketersRouter = router({
           marketerRecord = marketerRows[0];
         }
       } else {
-        // Marketer creating cafeteria - use their own reference code
+        // For marketers, they can only create cafeterias under themselves
+        // The marketerCode should match their own referenceCode
         const marketerRows = await db
           .select()
           .from(marketers)
@@ -320,69 +321,35 @@ export const marketersRouter = router({
 
       const id = nanoid();
 
-      // Get global free period setting
-      const globalFreeMonthsConfig = await db
-        .select()
-        .from(systemConfigs)
-        .where(eq(systemConfigs.key, "global_free_months"))
-        .limit(1);
-      
-      const freeMonths = globalFreeMonthsConfig.length > 0 ? parseInt(globalFreeMonthsConfig[0].value || "0") : 0;
-      const now = new Date();
-      let freeOperationEndDate = null;
-
-      if (freeMonths > 0) {
-        freeOperationEndDate = new Date(now);
-        freeOperationEndDate.setMonth(freeOperationEndDate.getMonth() + freeMonths);
-      }
-
-      // Use provided country/currency/language or inherit from marketer
+      // Enforce inheritance from marketer
       const country = input.country || marketerRecord.country;
       const currency = input.currency || marketerRecord.currency;
       const language = input.language || marketerRecord.language || "en";
 
       // Hash the password
       const salt = await bcryptjs.genSalt(10);
-      const hashedPassword = await bcryptjs.hash(input.passwordHash, salt);
+      const hashedPassword = await bcryptjs.hash(input.password, salt);
 
       await db.insert(cafeterias).values({
         id,
         marketerId: marketerRecord.id,
         name: input.name,
-        location: input.location || null,
+        location: input.location,
         loginUsername: input.loginUsername,
         passwordHash: hashedPassword,
         referenceCode: cafeteriaReferenceCode,
-        pointsBalance: "0",
-        graceMode: false,
         country,
         currency,
         language,
-        freeOperationEndDate,
-        subscriptionPlan: "starter",
-        subscriptionStatus: "active",
-        createdAt: now,
+        createdAt: new Date(),
       });
 
-      // If free period is active, also create a record in freeOperationPeriods for tracking
-      if (freeOperationEndDate) {
-        await db.insert(freeOperationPeriods).values({
-          id: nanoid(),
-          cafeteriaId: id,
-          periodType: "global_first_time",
-          startDate: now,
-          endDate: freeOperationEndDate,
-          reason: `Global first-time free period (${freeMonths} months)`,
-          createdAt: now,
-        });
-      }
-
-      // Create Supabase Auth account so the cafeteria can login
+      // Create Supabase Auth account
       if (supabaseAdmin) {
         try {
           const { error: authError } = await supabaseAdmin.auth.admin.createUser({
             email: input.loginUsername,
-            password: input.passwordHash,
+            password: input.password,
             email_confirm: true,
             user_metadata: {
               name: input.name,
@@ -393,258 +360,140 @@ export const marketersRouter = router({
 
           if (authError && !authError.message?.includes("already been registered") && !authError.message?.includes("already exists")) {
             console.error(`[createCafeteria] Failed to create Supabase Auth user:`, authError.message);
-          } else if (!authError) {
-            console.log(`[createCafeteria] Created Supabase Auth user for ${input.loginUsername}`);
           }
         } catch (authErr: any) {
           console.error(`[createCafeteria] Supabase Auth error:`, authErr.message);
         }
       }
 
+      // Also create a free operation period for the new cafeteria if configured
+      try {
+        const globalConfig = await db
+          .select()
+          .from(systemConfigs)
+          .where(eq(systemConfigs.key, "global_free_period_days"))
+          .limit(1);
+
+        const freeDays = globalConfig.length > 0 ? parseInt(globalConfig[0].value) : 0;
+
+        if (freeDays > 0) {
+          const endDate = new Date();
+          endDate.setDate(endDate.getDate() + freeDays);
+
+          await db.insert(freeOperationPeriods).values({
+            id: nanoid(),
+            cafeteriaId: id,
+            startDate: new Date(),
+            endDate,
+            periodType: "global_first_time",
+            isActive: true,
+          });
+
+          await db
+            .update(cafeterias)
+            .set({ freeOperationEndDate: endDate })
+            .where(eq(cafeterias.id, id));
+        }
+      } catch (err) {
+        console.error("[createCafeteria] Failed to create free period:", err);
+      }
+
       return {
         id,
         name: input.name,
         referenceCode: cafeteriaReferenceCode,
-        marketerCode: effectiveMarketerCode,
+        marketerReferenceCode: effectiveMarketerCode,
       };
     }),
 
   /**
-   * Get marketer hierarchy information
+   * List all level 1 marketers (only for owner)
    */
+  listLevel1Marketers: adminProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    return db
+      .select()
+      .from(marketers)
+      .where(eq(marketers.parentId, null as any))
+      .orderBy(marketers.createdAt);
+  }),
+
   /**
-   * List all marketers (only for owner)
+   * List all child marketers for a parent marketer
    */
-  listMarketers: adminProcedure
-    .query(async ({ ctx }) => {
+  listChildMarketers: ownerOrMarketerProcedure
+    .input(z.object({ parentMarketerCode: z.string() }))
+    .query(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
-      // Only the owner can list all marketers
-      if (ctx.user?.role !== "owner") {
-        throw new Error("Only the owner can list all marketers");
-      }
-
-      const allMarketers = await db
+      const parent = await db
         .select()
         .from(marketers)
-        .order(marketers.createdAt, { ascending: false });
-
-      return allMarketers;
-    }),
-
-  /**
-   * List all cafeterias (only for owner)
-   */
-  listCafeterias: adminProcedure
-    .query(async ({ ctx }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Database not available");
-
-      // Only the owner can list all cafeterias
-      if (ctx.user?.role !== "owner") {
-        throw new Error("Only the owner can list all cafeterias");
-      }
-
-      const allCafeterias = await db
-        .select()
-        .from(cafeterias)
-        .order(cafeterias.createdAt, { ascending: false });
-
-      return allCafeterias;
-    }),
-
-  getMarketerHierarchy: ownerOrMarketerProcedure
-    .input(z.object({ marketerCode: z.string() }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Database not available");
-
-      const marketer = await db
-        .select()
-        .from(marketers)
-        .where(eq(marketers.referenceCode, input.marketerCode));
-
-      if (marketer.length === 0) {
-        throw new Error(`Marketer not found: ${input.marketerCode}`);
-      }
-
-      const marketerData = marketer[0];
-
-      // Get parent information
-      let parentInfo = null;
-      if (marketerData.parentId) {
-        const parent = await db
-          .select()
-          .from(marketers)
-          .where(eq(marketers.id, marketerData.parentId));
-        if (parent.length > 0) {
-          parentInfo = {
-            id: parent[0].id,
-            name: parent[0].name,
-            referenceCode: parent[0].referenceCode,
-          };
-        }
-      }
-
-      // Get children marketers
-      const children = await db
-        .select()
-        .from(marketers)
-        .where(eq(marketers.parentId, marketerData.id));
-
-      // Get cafeterias
-      const cafeteriaList = await db
-        .select()
-        .from(cafeterias)
-        .where(eq(cafeterias.marketerId, marketerData.id));
-
-      return {
-        id: marketerData.id,
-        name: marketerData.name,
-        referenceCode: marketerData.referenceCode,
-        parent: parentInfo,
-        childMarketerCount: children.length,
-        childMarketers: children.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          referenceCode: c.referenceCode,
-        })),
-        cafeteriaCount: cafeteriaList.length,
-        cafeterias: cafeteriaList.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          referenceCode: c.referenceCode,
-        })),
-      };
-    }),
-
-  /**
-   * Get cafeteria information
-   */
-  getCafeteria: ownerOrMarketerProcedure
-    .input(z.object({ cafeteriaCode: z.string() }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Database not available");
-
-      const cafeteria = await db
-        .select()
-        .from(cafeterias)
-        .where(eq(cafeterias.referenceCode, input.cafeteriaCode));
-
-      if (cafeteria.length === 0) {
-        throw new Error(`Cafeteria not found: ${input.cafeteriaCode}`);
-      }
-
-      const cafeteriaData = cafeteria[0];
-
-      // Get marketer information
-      const marketer = await db
-        .select()
-        .from(marketers)
-        .where(eq(marketers.id, cafeteriaData.marketerId));
-
-      return {
-        id: cafeteriaData.id,
-        name: cafeteriaData.name,
-        referenceCode: cafeteriaData.referenceCode,
-        location: cafeteriaData.location,
-        pointsBalance: cafeteriaData.pointsBalance,
-        graceMode: cafeteriaData.graceMode,
-        marketer: marketer.length > 0 ? {
-          id: marketer[0].id,
-          name: marketer[0].name,
-          referenceCode: marketer[0].referenceCode,
-        } : null,
-      };
-    }),
-  
-  /**
-   * Get marketer balance information
-   */
-  getMarketerBalance: protectedProcedure
-    .input(z.object({ marketerId: z.string() }))
-    .query(async ({ input }) => {
-      const balance = await getMarketerBalance(input.marketerId);
-      if (!balance) {
-        return {
-          pendingBalance: "0",
-          availableBalance: "0",
-          totalWithdrawn: "0",
-        };
-      }
-      return balance;
-    }),
-
-  /**
-   * Freeze a marketer (owner only)
-   * Prevents commission distribution to this marketer and descendants
-   */
-  freezeMarketer: adminProcedure
-    .input(z.object({ marketerId: z.string() }))
-    .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Database not available");
-
-      if (ctx.user?.role !== "owner") {
-        throw new Error("Only the owner can freeze marketers");
-      }
-
-      const marketer = await db
-        .select()
-        .from(marketers)
-        .where(eq(marketers.id, input.marketerId))
+        .where(eq(marketers.referenceCode, input.parentMarketerCode))
         .limit(1);
 
-      if (marketer.length === 0) {
-        throw new Error("Marketer not found");
-      }
+      if (parent.length === 0) throw new Error("Parent marketer not found");
 
-      await db
-        .update(marketers)
-        .set({ status: "frozen" })
-        .where(eq(marketers.id, input.marketerId));
-
-      return {
-        success: true,
-        marketerCode: marketer[0].referenceCode,
-        status: "frozen",
-      };
+      return db
+        .select()
+        .from(marketers)
+        .where(eq(marketers.parentId, parent[0].id))
+        .orderBy(marketers.createdAt);
     }),
 
   /**
-   * Unfreeze a marketer (owner only)
+   * List all cafeterias for a marketer
    */
-  unfreezeMarketer: adminProcedure
-    .input(z.object({ marketerId: z.string() }))
-    .mutation(async ({ input, ctx }) => {
+  listCafeterias: ownerOrMarketerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    if (ctx.user?.role === "owner") {
+      return db.select().from(cafeterias).orderBy(cafeterias.createdAt);
+    }
+
+    // For marketers, we need to find their ID first
+    const marketer = await db
+      .select()
+      .from(marketers)
+      .where(eq(marketers.loginUsername, ctx.user?.email || ""))
+      .limit(1);
+
+    if (marketer.length === 0) return [];
+
+    return db
+      .select()
+      .from(cafeterias)
+      .where(eq(cafeterias.marketerId, marketer[0].id))
+      .orderBy(cafeterias.createdAt);
+  }),
+
+  /**
+   * Get marketer details by reference code
+   */
+  getMarketerByCode: protectedProcedure
+    .input(z.object({ referenceCode: z.string() }))
+    .query(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
-      if (ctx.user?.role !== "owner") {
-        throw new Error("Only the owner can unfreeze marketers");
-      }
-
-      const marketer = await db
+      const result = await db
         .select()
         .from(marketers)
-        .where(eq(marketers.id, input.marketerId))
+        .where(eq(marketers.referenceCode, input.referenceCode))
         .limit(1);
 
-      if (marketer.length === 0) {
-        throw new Error("Marketer not found");
-      }
+      if (result.length === 0) throw new Error("Marketer not found");
 
-      await db
-        .update(marketers)
-        .set({ status: "active" })
-        .where(eq(marketers.id, input.marketerId));
+      const marketer = result[0];
+      const balance = await getMarketerBalance(marketer.id);
 
       return {
-        success: true,
-        marketerCode: marketer[0].referenceCode,
-        status: "active",
+        ...marketer,
+        balance,
       };
     }),
 });

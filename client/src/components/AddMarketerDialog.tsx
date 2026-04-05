@@ -78,7 +78,7 @@ export function AddMarketerDialog({ open, onOpenChange, onSuccess, isOwner = fal
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
           loginUsername: formData.email.trim().toLowerCase(),
-          passwordHash: formData.password,
+          password: formData.password,
           country: formData.country,
           currency: formData.currency,
           language: formData.language,
@@ -93,7 +93,7 @@ export function AddMarketerDialog({ open, onOpenChange, onSuccess, isOwner = fal
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
           loginUsername: formData.email.trim().toLowerCase(),
-          passwordHash: formData.password,
+          password: formData.password,
         });
       }
 

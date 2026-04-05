@@ -169,7 +169,7 @@ export default function OwnerCafeterias() {
         name: formData.name.trim(),
         location: formData.location.trim() || null,
         loginUsername: formData.loginUsername.trim().toLowerCase(),
-        passwordHash: formData.password,
+        password: formData.password,
         country: formData.country,
         currency: formData.currency,
         language: formData.language,
