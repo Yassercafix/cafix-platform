@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import { parse as parseCookieHeader } from "cookie";
-import { jwtVerify, createRemoteJWKSet } from "jose";
+import { jwtVerify, importJWK, createRemoteJWKSet, type KeyLike } from "jose";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db.js";
 import { users, marketers, cafeterias, cafeteriaStaff } from "../../drizzle/schema.js";
@@ -18,14 +18,50 @@ export type TrpcContext = {
   } | null;
 };
 
-// ── JWKS remote key set (ES256) ───────────────────────────────────────────────
-// Supabase issues ES256 JWTs; we verify them using the project's public JWKS.
-// This works without any additional env variable.
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://ztamzcpkegijqcgbgtnn.supabase.co";
+// ── Supabase project configuration ───────────────────────────────────────────
+const supabaseUrl =
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  "https://ztamzcpkegijqcgbgtnn.supabase.co";
+
+// ── Embedded EC public key (ES256) ───────────────────────────────────────────
+// This is the live public key from the Supabase project's JWKS endpoint.
+// Embedding it eliminates the network round-trip to fetch JWKS on every cold
+// start, which is the primary cause of the 401 on Vercel serverless.
+// Source: GET https://ztamzcpkegijqcgbgtnn.supabase.co/auth/v1/.well-known/jwks.json
+const SUPABASE_EC_JWK = {
+  alg: "ES256",
+  crv: "P-256",
+  ext: true,
+  key_ops: ["verify"],
+  kid: "75f5cd02-d8fb-40ae-90be-f5b9fdffc153",
+  kty: "EC",
+  use: "sig",
+  x: "q5HfoyfIFVUfaHJy6iGKTGtmaDbsf8d1CiodFIU6TxQ",
+  y: "UmRJmyWoDW7-yFEa8AXfm4WckPYjvrZL_0WExEZ8igU",
+};
+
+// Pre-import the embedded key at module load time (sync-safe via promise).
+let _embeddedKey: KeyLike | null = null;
+let _embeddedKeyPromise: Promise<KeyLike> | null = null;
+
+function getEmbeddedKey(): Promise<KeyLike> {
+  if (_embeddedKey) return Promise.resolve(_embeddedKey);
+  if (!_embeddedKeyPromise) {
+    _embeddedKeyPromise = importJWK(SUPABASE_EC_JWK, "ES256").then((k) => {
+      _embeddedKey = k as KeyLike;
+      console.log("[context] Embedded EC public key imported successfully");
+      return _embeddedKey;
+    });
+  }
+  return _embeddedKeyPromise;
+}
+
+// ── JWKS remote key set (ES256) — kept as fallback for key rotation ──────────
 let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJwks() {
-  if (!_jwks && supabaseUrl) {
+  if (!_jwks) {
     try {
       const jwksUrl = `${supabaseUrl}/auth/v1/.well-known/jwks.json`;
       console.log("[context] Creating JWKS set from:", jwksUrl);
@@ -33,49 +69,62 @@ function getJwks() {
     } catch (e) {
       console.error("[context] Failed to create JWKS set:", e);
     }
-  } else if (!supabaseUrl) {
-    console.error("[context] SUPABASE_URL is missing, cannot create JWKS set");
   }
   return _jwks;
 }
 
 /**
- * Verify Supabase JWT token and extract user info.
- * Tries JWKS (ES256) first, then falls back to HS256 secret if configured.
+ * Verify a Supabase JWT token and extract its payload.
+ *
+ * Verification order:
+ *  1. Embedded EC public key (no network, fastest, covers the current key)
+ *  2. Remote JWKS (handles key rotation automatically)
+ *  3. HS256 secret (legacy fallback, only if SUPABASE_JWT_SECRET is set)
  */
 async function verifySupabaseToken(token: string): Promise<any> {
-  console.log("[context] Verifying token (length):", token?.length);
-  // ── Primary: JWKS / ES256 ──────────────────────────────────────────────────
+  console.log("[context] Verifying token, length:", token?.length);
+
+  // ── 1. Embedded EC public key (primary, no network dependency) ────────────
+  try {
+    const key = await getEmbeddedKey();
+    const { payload } = await jwtVerify(token, key, { algorithms: ["ES256"] });
+    console.log("[context] Embedded-key verification success for:", payload.email);
+    return payload;
+  } catch (e: any) {
+    console.warn("[context] Embedded-key verification failed:", e?.message);
+  }
+
+  // ── 2. Remote JWKS (fallback for key rotation) ────────────────────────────
   const jwks = getJwks();
   if (jwks) {
     try {
-      const { payload } = await jwtVerify(token, jwks);
+      const { payload } = await jwtVerify(token, jwks, { algorithms: ["ES256"] });
       console.log("[context] JWKS verification success for:", payload.email);
       return payload;
     } catch (e: any) {
-      // If JWKS verification fails, fall through to HS256 attempt
       console.warn("[context] JWKS verification failed:", e?.message);
     }
   }
 
-  // ── Fallback: HS256 secret ─────────────────────────────────────────────────
+  // ── 3. HS256 secret (legacy fallback) ─────────────────────────────────────
   if (process.env.SUPABASE_JWT_SECRET) {
     try {
       const secret = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET);
       const { payload } = await jwtVerify(token, secret);
+      console.log("[context] HS256 verification success for:", payload.email);
       return payload;
-    } catch (error) {
-      console.error("[context] HS256 JWT verification failed:", error);
-      return null;
+    } catch (e: any) {
+      console.error("[context] HS256 verification failed:", e?.message);
     }
   }
 
-  console.warn("[context] No JWT verification method available (no JWKS URL and no SUPABASE_JWT_SECRET)");
+  console.error("[context] All token verification methods failed");
   return null;
 }
 
 /**
- * Determine user role and get user data from database
+ * Resolve a verified Supabase user to a database record.
+ * Checks users → marketers → cafeterias → cafeteriaStaff in order.
  */
 async function getUserFromDatabase(
   email: string,
@@ -153,7 +202,11 @@ async function getUserFromDatabase(
 }
 
 /**
- * Create tRPC context with Supabase Auth
+ * Create tRPC context with Supabase Auth.
+ *
+ * Token extraction order:
+ *  1. Cookie: app_session_id (set by the backend login handler)
+ *  2. Authorization: Bearer <token> (set by trpcVanilla from localStorage)
  */
 export async function createContextSupabase(
   opts: CreateExpressContextOptions
@@ -161,60 +214,54 @@ export async function createContextSupabase(
   let user = null;
 
   try {
-    // Extract session token from cookie or Authorization header
+    // ── Extract session token ────────────────────────────────────────────────
     const cookieHeader = opts.req.headers.cookie || "";
     const cookies = parseCookieHeader(cookieHeader);
     let sessionToken = cookies[COOKIE_NAME];
 
     if (!sessionToken && opts.req.headers.authorization) {
-      sessionToken = opts.req.headers.authorization.split(" ")[1];
+      const authHeader = opts.req.headers.authorization;
+      if (authHeader.startsWith("Bearer ")) {
+        sessionToken = authHeader.slice(7).trim();
+      }
     }
 
     if (!sessionToken) {
-      // No session token, user is not authenticated
-      return {
-        req: opts.req,
-        res: opts.res,
-        user: null,
-      };
+      // No token present — unauthenticated request (public procedures are fine)
+      return { req: opts.req, res: opts.res, user: null };
     }
 
-    // Get database connection
+    console.log("[context] Token found, source:", cookies[COOKIE_NAME] ? "cookie" : "Authorization header");
+
+    // ── Verify the Supabase JWT ──────────────────────────────────────────────
+    const payload = await verifySupabaseToken(sessionToken);
+    if (!payload || !payload.email) {
+      console.warn("[context] Token verification returned no payload or no email");
+      return { req: opts.req, res: opts.res, user: null };
+    }
+
+    const email = payload.email as string;
+    const sub = payload.sub as string;
+
+    // ── Resolve user in database ─────────────────────────────────────────────
     const db = await getDb();
     if (!db) {
       console.error("[context] Database not available");
       return { req: opts.req, res: opts.res, user: null };
     }
 
-    // Verify the Supabase JWT token
-    const payload = await verifySupabaseToken(sessionToken);
-    if (!payload || !payload.email) {
-      return { req: opts.req, res: opts.res, user: null };
-    }
-    const email = payload.email;
-    const sub = payload.sub;
-
-    // Get user data from database
     user = await getUserFromDatabase(email, sub, db);
 
     if (!user) {
-      // User not found in database
-      console.warn(`[context] User ${email} not found in database`);
-      return {
-        req: opts.req,
-        res: opts.res,
-        user: null,
-      };
+      console.warn(`[context] Authenticated user ${email} (sub=${sub}) not found in any database table`);
+      return { req: opts.req, res: opts.res, user: null };
     }
+
+    console.log(`[context] Session resolved: ${email} role=${user.role}`);
   } catch (error) {
-    // Authentication is optional for public procedures
-    console.error("[context] Authentication error:", error);
+    console.error("[context] Unexpected authentication error:", error);
     user = null;
   }
 
-  return {
-    req: opts.req,
-    res: opts.res,
-    user,
-  };
+  return { req: opts.req, res: opts.res, user };
 }
