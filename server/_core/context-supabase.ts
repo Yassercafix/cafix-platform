@@ -21,7 +21,7 @@ export type TrpcContext = {
 // ── JWKS remote key set (ES256) ───────────────────────────────────────────────
 // Supabase issues ES256 JWTs; we verify them using the project's public JWKS.
 // This works without any additional env variable.
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJwks() {
