@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import { parse as parseCookieHeader } from "cookie";
-import { jwtVerify } from "jose";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db.js";
 import { users, marketers, cafeterias, cafeteriaStaff } from "../../drizzle/schema.js";
@@ -18,26 +18,56 @@ export type TrpcContext = {
   } | null;
 };
 
+// ── JWKS remote key set (ES256) ───────────────────────────────────────────────
+// Supabase issues ES256 JWTs; we verify them using the project's public JWKS.
+// This works without any additional env variable.
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+
+function getJwks() {
+  if (!_jwks && supabaseUrl) {
+    try {
+      _jwks = createRemoteJWKSet(
+        new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
+      );
+    } catch (e) {
+      console.error("[context] Failed to create JWKS set:", e);
+    }
+  }
+  return _jwks;
+}
+
 /**
- * Verify Supabase JWT token and extract user info
+ * Verify Supabase JWT token and extract user info.
+ * Tries JWKS (ES256) first, then falls back to HS256 secret if configured.
  */
 async function verifySupabaseToken(token: string): Promise<any> {
-  if (!process.env.SUPABASE_JWT_SECRET) {
-    console.warn("[context] SUPABASE_JWT_SECRET not configured - skipping JWT verification");
-    return null;
+  // ── Primary: JWKS / ES256 ──────────────────────────────────────────────────
+  const jwks = getJwks();
+  if (jwks) {
+    try {
+      const { payload } = await jwtVerify(token, jwks);
+      return payload;
+    } catch (e: any) {
+      // If JWKS verification fails, fall through to HS256 attempt
+      console.warn("[context] JWKS verification failed, trying HS256:", e?.message);
+    }
   }
-  try {
-    // Get Supabase JWT secret for verification
-    const secret = new TextEncoder().encode(
-      process.env.SUPABASE_JWT_SECRET || ""
-    );
 
-    const verified = await jwtVerify(token, secret);
-    return verified.payload;
-  } catch (error) {
-    console.error("[context] JWT verification failed:", error);
-    return null;
+  // ── Fallback: HS256 secret ─────────────────────────────────────────────────
+  if (process.env.SUPABASE_JWT_SECRET) {
+    try {
+      const secret = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET);
+      const { payload } = await jwtVerify(token, secret);
+      return payload;
+    } catch (error) {
+      console.error("[context] HS256 JWT verification failed:", error);
+      return null;
+    }
   }
+
+  console.warn("[context] No JWT verification method available (no JWKS URL and no SUPABASE_JWT_SECRET)");
+  return null;
 }
 
 /**
@@ -135,8 +165,6 @@ export async function createContextSupabase(
     if (!sessionToken && opts.req.headers.authorization) {
       sessionToken = opts.req.headers.authorization.split(" ")[1];
     }
-
-
 
     if (!sessionToken) {
       // No session token, user is not authenticated
