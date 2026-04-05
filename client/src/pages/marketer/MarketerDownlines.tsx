@@ -78,7 +78,7 @@ export default function MarketerDownlines() {
         .eq('parentId', user.id);
       
       if (mError) throw mError;
-      setSubMarketers((mData || []).map(m => ({
+      setSubMarketers((mData || []).map((m: any) => ({
         id: m.id,
         name: m.name,
         email: m.email,
@@ -95,7 +95,7 @@ export default function MarketerDownlines() {
         .eq('marketerId', user.id);
       
       if (cError) throw cError;
-      setSubCafeterias((cData || []).map(c => ({
+      setSubCafeterias((cData || []).map((c: any) => ({
         id: c.id,
         name: c.name,
         referenceCode: c.referenceCode,
