@@ -8,7 +8,7 @@ import { appRouter } from "../routers.js";
 import { createContextSupabase as createContext } from "./context-supabase.js";
 import { serveStatic, setupVite } from "./vite.js";
 import { handleStripeWebhook } from "../webhooks/stripe.js";
-import { ensureTestUsers } from "../utils/ensureTestUsers.js";
+// ensureTestUsers removed to enforce strict Supabase production auth.
 
 const app = express();
 
@@ -93,10 +93,7 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 
-  // Ensure required test/seed users exist in the database (non-blocking)
-  ensureTestUsers().catch(err =>
-    console.warn("[startup] ensureTestUsers failed (non-fatal):", err)
-  );
+  // Seeding removed to enforce strict Supabase production auth.
 }
 
 // Only start the server if we're NOT in a serverless (Vercel) environment

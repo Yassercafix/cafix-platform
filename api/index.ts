@@ -9,9 +9,8 @@ import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "../server/_core/oauth.js";
 import { appRouter } from "../server/routers.js";
-import { createContext } from "../server/_core/context.js";
+import { createContextSupabase as createContext } from "../server/_core/context-supabase.js";
 import { handleStripeWebhook } from "../server/webhooks/stripe.js";
-import { ensureTestUsers } from "../server/utils/ensureTestUsers.js";
 
 console.log("[API] Starting serverless function initialization...");
 
@@ -86,11 +85,8 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   }
 });
 
-// Ensure test users exist (non-blocking, runs once per cold start)
-// Wrapped in try-catch to prevent startup crash
-ensureTestUsers().catch(err =>
-  console.warn("[startup] ensureTestUsers failed (non-fatal):", err)
-);
+// Startup initialization complete.
+// Seeding removed to enforce strict Supabase production auth.
 
 console.log("[API] Serverless function initialization complete.");
 
