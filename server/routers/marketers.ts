@@ -472,6 +472,82 @@ export const marketersRouter = router({
   }),
 
   /**
+   * List all marketers (alias for listLevel1Marketers, used by OwnerMarketers page)
+   * Returns all top-level marketers for owner, or all marketers for admin access
+   */
+  listMarketers: adminProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    return db
+      .select()
+      .from(marketers)
+      .orderBy(marketers.createdAt);
+  }),
+
+  /**
+   * Freeze a marketer (owner only)
+   */
+  freezeMarketer: adminProcedure
+    .input(z.object({ marketerId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const marketer = await db
+        .select()
+        .from(marketers)
+        .where(eq(marketers.id, input.marketerId))
+        .limit(1);
+
+      if (marketer.length === 0) {
+        throw new Error("Marketer not found");
+      }
+
+      await db
+        .update(marketers)
+        .set({ status: "frozen" })
+        .where(eq(marketers.id, input.marketerId));
+
+      return {
+        success: true,
+        marketerId: input.marketerId,
+        status: "frozen",
+      };
+    }),
+
+  /**
+   * Unfreeze a marketer (owner only)
+   */
+  unfreezeMarketer: adminProcedure
+    .input(z.object({ marketerId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const marketer = await db
+        .select()
+        .from(marketers)
+        .where(eq(marketers.id, input.marketerId))
+        .limit(1);
+
+      if (marketer.length === 0) {
+        throw new Error("Marketer not found");
+      }
+
+      await db
+        .update(marketers)
+        .set({ status: "active" })
+        .where(eq(marketers.id, input.marketerId));
+
+      return {
+        success: true,
+        marketerId: input.marketerId,
+        status: "active",
+      };
+    }),
+
+  /**
    * Get marketer details by reference code
    */
   getMarketerByCode: protectedProcedure
