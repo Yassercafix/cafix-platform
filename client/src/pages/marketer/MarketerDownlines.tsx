@@ -12,8 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Users, LayoutDashboard, Wallet, BarChart3, Plus, Store, Hash, Globe, Mail, Phone, ShieldCheck, UserPlus, RefreshCw } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { trpcVanilla as trpc } from '@/lib/trpcVanilla';
 import { toast } from 'sonner';
+
 // Inlined from server/utils/referenceCodeGenerator.ts (pure function — no server deps)
 const OWNER_REFERENCE_CODE = "10";
 function getMarketerDepth(code: string): number {
@@ -48,10 +49,10 @@ export default function MarketerDownlines() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  
+
   const [subMarketers, setSubMarketers] = useState<SubMarketer[]>([]);
   const [subCafeterias, setSubCafeterias] = useState<SubCafeteria[]>([]);
-  
+
   const [showMarketerDialog, setShowMarketerDialog] = useState(false);
   const [showCafeteriaDialog, setShowCafeteriaDialog] = useState(false);
 
@@ -68,50 +69,41 @@ export default function MarketerDownlines() {
   ];
 
   const fetchData = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.referenceCode) return;
     setLoading(true);
     try {
-      // Fetch Sub-Marketers from 'marketers' table
-      const { data: mData, error: mError } = await supabase
-        .from('marketers')
-        .select('*')
-        .eq('parentId', user.id);
-      
-      if (mError) throw mError;
+      // Fetch Sub-Marketers via tRPC
+      const mData = await trpc.marketers.listChildMarketers.query({
+        parentMarketerCode: user.referenceCode,
+      });
       setSubMarketers((mData || []).map((m: any) => ({
         id: m.id,
         name: m.name,
-        email: m.email,
+        email: m.email || m.loginUsername,
         referenceCode: m.referenceCode,
         country: m.country,
         currency: m.currency,
-        createdAt: m.createdAt
+        createdAt: m.createdAt,
       })));
 
-      // Fetch Sub-Cafeterias
-      const { data: cData, error: cError } = await supabase
-        .from('cafeterias')
-        .select('*')
-        .eq('marketerId', user.id);
-      
-      if (cError) throw cError;
+      // Fetch Sub-Cafeterias via tRPC
+      const cData = await trpc.marketers.listCafeterias.query();
       setSubCafeterias((cData || []).map((c: any) => ({
         id: c.id,
         name: c.name,
         referenceCode: c.referenceCode,
         country: c.country,
         currency: c.currency,
-        subscriptionStatus: c.subscriptionStatus,
-        createdAt: c.createdAt
+        subscriptionStatus: c.subscriptionStatus || 'active',
+        createdAt: c.createdAt,
       })));
-
     } catch (err: any) {
       console.error('Fetch error:', err);
       toast.error(isRTL ? 'خطأ في تحميل البيانات' : 'Error loading data');
     } finally {
       setLoading(false);
     }
-  }, [user?.id, isRTL]);
+  }, [user?.referenceCode, isRTL]);
 
   useEffect(() => {
     if (!authLoading) fetchData();
@@ -122,6 +114,10 @@ export default function MarketerDownlines() {
       toast.error(isRTL ? 'يرجى ملء جميع الحقول' : 'Please fill all fields');
       return;
     }
+    if (marketerForm.password.length < 8) {
+      toast.error(isRTL ? 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' : 'Password must be at least 8 characters');
+      return;
+    }
 
     // Enforce Level 3 limit: Level 3 marketers cannot create other marketers
     const currentDepth = getMarketerDepth(user?.referenceCode || '');
@@ -130,56 +126,27 @@ export default function MarketerDownlines() {
       return;
     }
 
+    if (!user?.referenceCode) {
+      toast.error(isRTL ? 'لم يتم العثور على الرمز المرجعي' : 'Reference code not found');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      // 1. Get Parent Data (Inheritance)
-      const { data: parent } = await supabase
-        .from('marketers')
-        .select('id, referenceCode, country, currency, language')
-        .eq('id', user?.id)
-        .single();
-      
-      if (!parent) throw new Error("Parent marketer not found");
-
-      // 2. Generate Reference Code (ParentCode + 2 digits)
-      const { data: existing } = await supabase
-        .from('marketers')
-        .select('referenceCode')
-        .like('referenceCode', `${parent.referenceCode}%`)
-        .not('referenceCode', 'eq', parent.referenceCode)
-        .order('referenceCode', { ascending: false })
-        .limit(1);
-      
-      let nextNum = 1;
-      if (existing && existing.length > 0 && existing[0].referenceCode) {
-        const lastCode = existing[0].referenceCode;
-        const lastTwo = lastCode.slice(-2);
-        if (!isNaN(parseInt(lastTwo))) nextNum = parseInt(lastTwo) + 1;
-      }
-      const newRefCode = `${parent.referenceCode}${String(nextNum).padStart(2, '0')}`;
-
-      const insertData = {
-        name: marketerForm.name,
+      await trpc.marketers.createChildMarketer.mutate({
+        parentMarketerCode: user.referenceCode,
+        name: marketerForm.name.trim(),
         email: marketerForm.email.trim().toLowerCase(),
         loginUsername: marketerForm.email.trim().toLowerCase(),
-        passwordHash: marketerForm.password,
-        parentId: parent.id,
-        country: parent.country,
-        currency: parent.currency,
-        language: parent.language,
-        referenceCode: newRefCode,
-        createdAt: new Date().toISOString()
-      };
-
-      const { error } = await supabase.from('marketers').insert([insertData]);
-      if (error) throw error;
-
+        password: marketerForm.password,
+      });
       toast.success(isRTL ? 'تم إضافة المسوق بنجاح' : 'Marketer added successfully');
       setShowMarketerDialog(false);
       setMarketerForm({ name: '', email: '', password: '' });
       fetchData();
     } catch (err: any) {
-      toast.error(err.message);
+      const msg = err?.data?.message || err?.message || (isRTL ? 'خطأ في إضافة المسوق' : 'Error adding marketer');
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -190,63 +157,30 @@ export default function MarketerDownlines() {
       toast.error(isRTL ? 'يرجى ملء جميع الحقول' : 'Please fill all fields');
       return;
     }
+    if (cafeteriaForm.password.length < 8) {
+      toast.error(isRTL ? 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' : 'Password must be at least 8 characters');
+      return;
+    }
+    if (!user?.referenceCode) {
+      toast.error(isRTL ? 'لم يتم العثور على الرمز المرجعي' : 'Reference code not found');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      // 1. Get Parent Data (Inheritance)
-      const { data: parent } = await supabase
-        .from('marketers')
-        .select('id, referenceCode, country, currency, language')
-        .eq('id', user?.id)
-        .single();
-      
-      if (!parent) throw new Error("Parent marketer not found");
-
-      // 2. Generate Reference Code (ParentCode + P + 2 digits)
-      const { data: existing } = await supabase
-        .from('cafeterias')
-        .select('referenceCode')
-        .like('referenceCode', `${parent.referenceCode}P%`)
-        .order('referenceCode', { ascending: false })
-        .limit(1);
-      
-      let nextNum = 1;
-      if (existing && existing.length > 0 && existing[0].referenceCode) {
-        const lastCode = existing[0].referenceCode;
-        const match = lastCode.match(/P(\d+)$/);
-        if (match) nextNum = parseInt(match[1]) + 1;
-      }
-      const newRefCode = `${parent.referenceCode}P${String(nextNum).padStart(2, '0')}`;
-
-      const insertData: any = {
-        name: cafeteriaForm.name,
+      await trpc.marketers.createCafeteria.mutate({
+        marketerCode: user.referenceCode,
+        name: cafeteriaForm.name.trim(),
         loginUsername: cafeteriaForm.email.trim().toLowerCase(),
-        passwordHash: cafeteriaForm.password,
-        marketerId: parent.id,
-        country: parent.country,
-        currency: parent.currency,
-        language: parent.language,
-        referenceCode: newRefCode,
-        pointsBalance: 0,
-        subscriptionStatus: 'active',
-        createdAt: new Date().toISOString()
-      };
-
-      const { error } = await supabase.from('cafeterias').insert([insertData]);
-      
-      if (error && error.message.includes('subscriptionPlan')) {
-        delete insertData.subscriptionPlan;
-        const { error: retryError } = await supabase.from('cafeterias').insert([insertData]);
-        if (retryError) throw retryError;
-      } else if (error) {
-        throw error;
-      }
-
+        password: cafeteriaForm.password,
+      });
       toast.success(isRTL ? 'تم إضافة الكافيتريا بنجاح' : 'Cafeteria added successfully');
       setShowCafeteriaDialog(false);
       setCafeteriaForm({ name: '', email: '', password: '' });
       fetchData();
     } catch (err: any) {
-      toast.error(err.message);
+      const msg = err?.data?.message || err?.message || (isRTL ? 'خطأ في إضافة الكافيتريا' : 'Error adding cafeteria');
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -378,6 +312,10 @@ export default function MarketerDownlines() {
               <Globe className="w-4 h-4" />
               {isRTL ? `سيرث المسوق البلد (${user?.country}) والعملة (${user?.currency}) تلقائياً` : `Will inherit Country (${user?.country}) and Currency (${user?.currency})`}
             </div>
+            <div className="p-3 bg-green-50 rounded-lg text-xs text-green-700 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              {isRTL ? 'سيتم إنشاء حساب Supabase Auth تلقائياً لتمكين تسجيل الدخول' : 'A Supabase Auth account will be created automatically to enable login'}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMarketerDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
@@ -406,6 +344,10 @@ export default function MarketerDownlines() {
             <div className="p-3 bg-green-50 rounded-lg text-xs text-green-700 flex items-center gap-2">
               <Globe className="w-4 h-4" />
               {isRTL ? `ستورث الكافيتريا البلد (${user?.country}) والعملة (${user?.currency}) تلقائياً` : `Will inherit Country (${user?.country}) and Currency (${user?.currency})`}
+            </div>
+            <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              {isRTL ? 'سيتم إنشاء حساب Supabase Auth تلقائياً لتمكين تسجيل الدخول' : 'A Supabase Auth account will be created automatically to enable login'}
             </div>
           </div>
           <DialogFooter>

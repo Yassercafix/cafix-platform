@@ -16,7 +16,7 @@ import {
   Users, LayoutDashboard, UtensilsCrossed, Table2, BarChart3, CreditCard, Settings,
   Plus, Edit, Trash2, Lock, Unlock, ChefHat, UserCheck, Phone, Mail, ShieldCheck, ShieldAlert
 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { trpcVanilla as trpc } from '@/lib/trpcVanilla';
 import { toast } from 'sonner';
 
 interface StaffMember {
@@ -28,6 +28,7 @@ interface StaffMember {
   status: string;
   canLogin: boolean;
   cafeteriaId: string;
+  referenceCode?: string;
 }
 
 export default function CafeteriaStaff() {
@@ -39,7 +40,6 @@ export default function CafeteriaStaff() {
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -68,21 +68,17 @@ export default function CafeteriaStaff() {
     if (!cafeteriaId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('cafeteriaStaff')
-        .select('*')
-        .eq('cafeteriaId', cafeteriaId)
-        .order('createdAt', { ascending: false });
-      if (error) throw error;
-      const mapped = (data || []).map((s: any) => ({
+      const data = await trpc.staff.getStaff.query({ cafeteriaId });
+      const mapped: StaffMember[] = (data || []).map((s: any) => ({
         id: s.id,
         name: s.name,
         role: s.role,
-        loginUsername: s.login_username,
+        loginUsername: s.loginUsername,
         phone: s.phone,
         status: s.status,
-        canLogin: s.can_login,
-        cafeteriaId: s.cafeteria_id,
+        canLogin: s.canLogin,
+        cafeteriaId: s.cafeteriaId,
+        referenceCode: s.referenceCode,
       }));
       setStaffList(mapped);
     } catch (err: any) {
@@ -104,26 +100,27 @@ export default function CafeteriaStaff() {
       toast.error(isRTL ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
       return;
     }
+    if (formData.password.length < 6) {
+      toast.error(isRTL ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters');
+      return;
+    }
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('cafeteriaStaff').insert({
-        cafeteriaId: cafeteriaId,
+      await trpc.staff.createStaff.mutate({
+        cafeteriaId,
         name: formData.name,
-        role: formData.role,
-        loginUsername: formData.loginUsername,
-        passwordHash: formData.password,
-        phone: formData.phone || null,
-        status: 'active',
-        canLogin: true,
-        createdAt: new Date().toISOString(),
+        role: formData.role as 'cafeteria_admin' | 'manager' | 'waiter' | 'chef',
+        loginUsername: formData.loginUsername.trim().toLowerCase(),
+        password: formData.password,
+        phone: formData.phone || undefined,
       });
-      if (error) throw error;
       toast.success(isRTL ? 'تم إضافة الموظف بنجاح' : 'Staff member added successfully');
       setShowAddDialog(false);
       setFormData({ name: '', role: 'waiter', loginUsername: '', password: '', phone: '' });
       fetchStaff();
     } catch (err: any) {
-      toast.error(err.message || (isRTL ? 'خطأ في إضافة الموظف' : 'Error adding staff'));
+      const msg = err?.data?.message || err?.message || (isRTL ? 'خطأ في إضافة الموظف' : 'Error adding staff');
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -131,11 +128,10 @@ export default function CafeteriaStaff() {
 
   const handleToggleLogin = async (staff: StaffMember) => {
     try {
-      const { error } = await supabase
-        .from('cafeteriaStaff')
-        .update({ canLogin: !staff.canLogin })
-        .eq('id', staff.id);
-      if (error) throw error;
+      await trpc.staff.toggleStaffLogin.mutate({
+        staffId: staff.id,
+        enable: !staff.canLogin,
+      });
       toast.success(
         staff.canLogin
           ? (isRTL ? 'تم تعطيل تسجيل الدخول' : 'Login disabled')
@@ -151,16 +147,12 @@ export default function CafeteriaStaff() {
     if (!selectedStaff) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('cafeteriaStaff')
-        .delete()
-        .eq('id', selectedStaff.id);
-      if (error) throw error;
+      await trpc.staff.deleteStaff.mutate({ staffId: selectedStaff.id });
       toast.success(isRTL ? 'تم حذف الموظف' : 'Staff member deleted');
       setShowDeleteDialog(false);
       fetchStaff();
     } catch (err: any) {
-      toast.error(err.message || (isRTL ? 'خطأ في حذف الموظف' : 'Error deleting staff'));
+      toast.error(err?.data?.message || err?.message || (isRTL ? 'خطأ في حذف الموظف' : 'Error deleting staff'));
     } finally {
       setSubmitting(false);
     }
@@ -238,8 +230,8 @@ export default function CafeteriaStaff() {
                         <TableCell className="font-mono text-xs text-slate-600">{staff.loginUsername}</TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center gap-1">
-                            <Switch 
-                              checked={staff.canLogin} 
+                            <Switch
+                              checked={staff.canLogin}
                               onCheckedChange={() => handleToggleLogin(staff)}
                               className="data-[state=checked]:bg-green-500"
                             />
@@ -280,11 +272,20 @@ export default function CafeteriaStaff() {
               </div>
               <div className="space-y-2"><Label>{isRTL ? 'رقم الهاتف' : 'Phone'}</Label><Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="0123456789" /></div>
             </div>
-            <div className="space-y-2"><Label>{isRTL ? 'اسم المستخدم للدخول' : 'Login Username'}</Label><Input value={formData.loginUsername} onChange={e => setFormData({...formData, loginUsername: e.target.value})} placeholder="john_waiter" /></div>
+            <div className="space-y-2">
+              <Label>{isRTL ? 'البريد الإلكتروني (اسم المستخدم)' : 'Email (Login Username)'}</Label>
+              <Input
+                type="email"
+                value={formData.loginUsername}
+                onChange={e => setFormData({...formData, loginUsername: e.target.value})}
+                placeholder="staff@example.com"
+              />
+              <p className="text-[10px] text-slate-400">{isRTL ? 'يجب أن يكون بريداً إلكترونياً صحيحاً لتسجيل الدخول' : 'Must be a valid email address for login'}</p>
+            </div>
             <div className="space-y-2"><Label>{isRTL ? 'كلمة المرور' : 'Password'}</Label><Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} /></div>
             <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 flex gap-2">
               <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
-              <p className="text-[10px] text-blue-700">{isRTL ? 'سيتم تفعيل صلاحية تسجيل الدخول تلقائياً لهذا الموظف.' : 'Login permission will be enabled automatically for this staff member.'}</p>
+              <p className="text-[10px] text-blue-700">{isRTL ? 'سيتم إنشاء حساب تسجيل دخول كامل لهذا الموظف تلقائياً.' : 'A full login account will be created automatically for this staff member.'}</p>
             </div>
           </div>
           <DialogFooter className="gap-2">

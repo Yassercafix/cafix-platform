@@ -40,8 +40,19 @@ import {
   getSectionsByCafeteria,
 } from "../db.js";
 import bcryptjs from "bcryptjs";
+import { createClient } from "@supabase/supabase-js";
 
 const SALT_ROUNDS = 10;
+
+// Initialize Supabase admin client for creating auth accounts
+const _supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+const _supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+let supabaseAdmin: any = null;
+if (_supabaseUrl && _supabaseServiceKey) {
+  supabaseAdmin = createClient(_supabaseUrl, _supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 /**
  * Hash password using bcryptjs
@@ -166,6 +177,37 @@ export const staffRouter = router({
           permissions: getDefaultPermissionsForRole(input.role),
         };
       });
+
+      // Create Supabase Auth account so the staff member can login
+      // This runs OUTSIDE the transaction so a Supabase failure doesn't roll back the DB record
+      if (supabaseAdmin) {
+        try {
+          const { error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: input.loginUsername,
+            password: input.password,
+            email_confirm: true,
+            user_metadata: {
+              name: input.name,
+              role: input.role,
+              cafeteriaId: input.cafeteriaId,
+            },
+          });
+          if (authError) {
+            if (
+              authError.message?.includes("already been registered") ||
+              authError.message?.includes("already exists")
+            ) {
+              console.log(`[createStaff] Supabase Auth user already exists for ${input.loginUsername}`);
+            } else {
+              console.error(`[createStaff] Failed to create Supabase Auth user:`, authError.message);
+            }
+          } else {
+            console.log(`[createStaff] Created Supabase Auth user for ${input.loginUsername}`);
+          }
+        } catch (authErr: any) {
+          console.error(`[createStaff] Supabase Auth error:`, authErr.message);
+        }
+      }
     }),
 
   /**
@@ -201,6 +243,7 @@ export const staffRouter = router({
           role: s.role,
           status: s.status,
           canLogin: s.canLogin,
+          cafeteriaId: s.cafeteriaId,
           assignment,
           referenceCode: s.referenceCode,
           loginPermissionGrantedAt: s.loginPermissionGrantedAt,
@@ -574,20 +617,43 @@ export const staffRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
+      // Fetch staff record before deletion to get loginUsername for Supabase Auth cleanup
+      const staffRecord = await db
+        .select()
+        .from(cafeteriaStaff)
+        .where(eq(cafeteriaStaff.id, input.staffId))
+        .limit(1);
+
       // Remove section assignments first
       await db
         .delete(staffSectionAssignments)
         .where(eq(staffSectionAssignments.staffId, input.staffId));
-
       // Remove category assignments
       await db
         .delete(staffCategoryAssignments)
         .where(eq(staffCategoryAssignments.staffId, input.staffId));
-
       // Delete the staff member
       await db
         .delete(cafeteriaStaff)
         .where(eq(cafeteriaStaff.id, input.staffId));
+
+      // Delete Supabase Auth account if it exists
+      if (supabaseAdmin && staffRecord.length > 0) {
+        const loginUsername = staffRecord[0].loginUsername;
+        if (loginUsername) {
+          try {
+            // Find the Supabase Auth user by email
+            const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+            const authUser = authUsers?.users?.find((u: any) => u.email === loginUsername);
+            if (authUser) {
+              await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+              console.log(`[deleteStaff] Deleted Supabase Auth user for ${loginUsername}`);
+            }
+          } catch (authErr: any) {
+            console.error(`[deleteStaff] Failed to delete Supabase Auth user:`, authErr.message);
+          }
+        }
+      }
 
       return {
         success: true,
