@@ -31,11 +31,19 @@ export const tablesRouter = router({
 
       // Enforce plan limits for sections
       const planContext = await getPlanContext(input.cafeteriaId);
-      assertFeature(
-        planContext, 
-        "sections", 
-        `Multiple sections is a premium feature. Your current ${planContext.plan} plan does not support this.`
-      );
+      // Allow at least one section even on starter plan to enable table creation
+      const db_sections = await db
+        .select()
+        .from(sections)
+        .where(eq(sections.cafeteriaId, input.cafeteriaId));
+      
+      if (db_sections.length > 0) {
+        assertFeature(
+          planContext, 
+          "sections", 
+          `Multiple sections is a premium feature. Your current ${planContext.plan} plan does not support this.`
+        );
+      }
 
       const validation = validateSectionData(input.name);
       if (!validation.valid) {
