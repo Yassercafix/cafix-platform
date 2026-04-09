@@ -17,7 +17,7 @@ CREATE TYPE "public"."report_type" AS ENUM('daily', 'weekly', 'monthly');--> sta
 CREATE TYPE "public"."shift_status" AS ENUM('active', 'completed', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."staff_role" AS ENUM('admin', 'manager', 'waiter', 'chef');--> statement-breakpoint
 CREATE TYPE "public"."staff_status" AS ENUM('active', 'inactive');--> statement-breakpoint
-CREATE TYPE "public"."table_status" AS ENUM('available', 'occupied', 'reserved', 'cleaning');--> statement-breakpoint
+CREATE TYPE "public"."table_status" AS ENUM('available', 'occupied', 'reserved', 'cleaning', 'free', 'in_progress', 'ready', 'served');--> statement-breakpoint
 CREATE TYPE "public"."user_role" AS ENUM('user', 'admin', 'owner', 'marketer', 'cafeteria_admin', 'manager', 'waiter', 'chef');--> statement-breakpoint
 CREATE TYPE "public"."withdrawal_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "cafeteriaMarketerRelationships" (
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS "cafeteriaTables" (
 	"sectionId" text,
 	"tableNumber" integer NOT NULL,
 	"capacity" integer,
-	"status" "table_status" DEFAULT 'available',
+	"status" "table_status" DEFAULT 'free',
 	"tableToken" varchar(64),
 	"createdAt" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "cafeteriaTables_tableToken_unique" UNIQUE("tableToken")
@@ -584,3 +584,24 @@ CREATE INDEX IF NOT EXISTS "idx_marketerBalances_marketerId"
 CREATE INDEX IF NOT EXISTS "idx_orders_status" ON "orders"("status");
 CREATE INDEX IF NOT EXISTS "idx_orders_cafeteriaId" ON "orders"("cafeteriaId");
 CREATE INDEX IF NOT EXISTS "idx_orders_createdAt" ON "orders"("createdAt" DESC);
+
+
+-- ============================================================================
+-- PHASE 2 FIX: Align table_status enum with application code
+-- 
+-- Root cause: The live DB has table_status = ('available','occupied','reserved','cleaning')
+-- but the application code inserts status = 'free' which does not exist in the enum.
+-- This migration adds the required values to the enum and updates the column default.
+-- ============================================================================
+ALTER TYPE "public"."table_status" ADD VALUE IF NOT EXISTS 'free';
+ALTER TYPE "public"."table_status" ADD VALUE IF NOT EXISTS 'in_progress';
+ALTER TYPE "public"."table_status" ADD VALUE IF NOT EXISTS 'ready';
+ALTER TYPE "public"."table_status" ADD VALUE IF NOT EXISTS 'served';
+
+-- Update the column default to use 'free' instead of 'available'
+ALTER TABLE "cafeteriaTables" ALTER COLUMN "status" SET DEFAULT 'free';
+
+-- Migrate any existing rows using old enum values to new ones
+UPDATE "cafeteriaTables" SET "status" = 'free'        WHERE "status" = 'available';
+UPDATE "cafeteriaTables" SET "status" = 'occupied'    WHERE "status" = 'reserved';
+UPDATE "cafeteriaTables" SET "status" = 'in_progress' WHERE "status" = 'cleaning';

@@ -9,7 +9,7 @@ CREATE TYPE "public"."report_type" AS ENUM('daily', 'weekly', 'monthly');;
 CREATE TYPE "public"."shift_status" AS ENUM('active', 'completed', 'cancelled');;
 CREATE TYPE "public"."staff_role" AS ENUM('admin', 'manager', 'waiter', 'chef');;
 CREATE TYPE "public"."staff_status" AS ENUM('active', 'inactive');;
-CREATE TYPE "public"."table_status" AS ENUM('available', 'occupied', 'reserved', 'cleaning');;
+CREATE TYPE "public"."table_status" AS ENUM('available', 'occupied', 'reserved', 'cleaning', 'free', 'in_progress', 'ready', 'served');;
 CREATE TYPE "public"."user_role" AS ENUM('user', 'admin', 'owner', 'marketer', 'cafeteria_admin', 'manager', 'waiter', 'chef');;
 CREATE TYPE "public"."withdrawal_status" AS ENUM('pending', 'approved', 'rejected');;
 CREATE TABLE IF NOT EXISTS "cafeteriaMarketerRelationships" (
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS "cafeteriaTables" (
 	"sectionId" text,
 	"tableNumber" integer NOT NULL,
 	"capacity" integer,
-	"status" "table_status" DEFAULT 'available',
+	"status" "table_status" DEFAULT 'free',
 	"tableToken" varchar(64),
 	"createdAt" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "cafeteriaTables_tableToken_unique" UNIQUE("tableToken")

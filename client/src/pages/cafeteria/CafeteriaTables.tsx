@@ -106,19 +106,19 @@ export default function CafeteriaTables() {
     }
   });
 
-  const sections = (sectionsQuery.data || []).map(s => ({
+  const sections = (sectionsQuery.data || []).map((s: any) => ({
     id: s.id,
     name: s.name,
     cafeteriaId: s.cafeteriaId
   }));
 
-  const tables = (tablesQuery.data || []).map(t => ({
+  const tables = (tablesQuery.data || []).map((t: any) => ({
     id: t.id,
     tableNumber: t.tableNumber,
     capacity: t.capacity,
     status: t.status,
     sectionId: t.sectionId,
-    sectionName: sections.find(s => s.id === t.sectionId)?.name,
+    sectionName: sections.find((s: any) => s.id === t.sectionId)?.name,
     tableToken: t.tableToken,
     cafeteriaId: t.cafeteriaId
   }));
@@ -184,7 +184,7 @@ export default function CafeteriaTables() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const qrCodes = await Promise.all(tables.map(async (t) => {
+    const qrCodes = await Promise.all(tables.map(async (t: any) => {
       const url = await QRCode.toDataURL(`${window.location.origin}/order/${t.tableToken}`, { width: 400, margin: 2 });
       return { url, number: t.tableNumber };
     }));
@@ -293,8 +293,8 @@ export default function CafeteriaTables() {
           </Card>
         ) : (
           <div className="space-y-8">
-            {sections.map(section => {
-              const sectionTables = tables.filter(t => t.sectionId === section.id);
+            {sections.map((section: any) => {
+              const sectionTables = tables.filter((t: any) => t.sectionId === section.id);
               return (
                 <div key={section.id}>
                   <div className="flex items-center justify-between mb-4">
@@ -315,7 +315,7 @@ export default function CafeteriaTables() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {sectionTables.map(table => (
+                      {sectionTables.map((table: any) => (
                         <Card key={table.id} className="overflow-hidden hover:shadow-md transition-shadow group">
                           <CardContent className="p-4">
                             <div className="flex justify-between items-start mb-4">
@@ -363,8 +363,8 @@ export default function CafeteriaTables() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowAddSectionDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-            <Button onClick={handleAddSection} disabled={createSectionMutation.isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {createSectionMutation.isLoading ? '...' : (isRTL ? 'إضافة' : 'Add')}
+            <Button onClick={handleAddSection} disabled={createSectionMutation.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {createSectionMutation.isPending ? '...' : (isRTL ? 'إضافة' : 'Add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -384,7 +384,7 @@ export default function CafeteriaTables() {
               <Select value={tableForm.sectionId} onValueChange={v => setTableForm({ ...tableForm, sectionId: v })}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder={isRTL ? 'اختر القسم' : 'Select section'} /></SelectTrigger>
                 <SelectContent>
-                  {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {sections.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -395,8 +395,8 @@ export default function CafeteriaTables() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowAddTableDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-            <Button onClick={handleAddTable} disabled={createTableMutation.isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {createTableMutation.isLoading ? '...' : (isRTL ? 'إضافة' : 'Add')}
+            <Button onClick={handleAddTable} disabled={createTableMutation.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {createTableMutation.isPending ? '...' : (isRTL ? 'إضافة' : 'Add')}
             </Button>
           </DialogFooter>
         </DialogContent>
