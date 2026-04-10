@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db.js";
 import { cafeterias } from "../../drizzle/schema.js";
 
@@ -43,20 +43,50 @@ export interface PlanContext {
 /**
  * Retrieves the plan context for a specific cafeteria.
  * Performs exactly one database query.
+ *
+ * Falls back gracefully if the subscriptionPlan column does not yet exist
+ * (pre-migration state) by running a simpler id-only query.
  */
 export async function getPlanContext(cafeteriaId: string): Promise<PlanContext> {
   const db = await getDb();
   if (!db) throw new Error("[PLAN] Database not available");
-  const result = await db
-    .select({
-      subscriptionPlan: cafeterias.subscriptionPlan,
-    })
-    .from(cafeterias)
-    .where(eq(cafeterias.id, cafeteriaId))
-    .limit(1);
+
+  // Primary query — includes subscriptionPlan
+  let result: any[] = [];
+  try {
+    result = await db
+      .select({
+        subscriptionPlan: cafeterias.subscriptionPlan,
+      })
+      .from(cafeterias)
+      .where(eq(cafeterias.id, cafeteriaId))
+      .limit(1);
+  } catch (queryErr: any) {
+    // If the subscriptionPlan column doesn't exist yet (pre-migration),
+    // fall back to a raw query that only selects the id column.
+    console.warn(
+      "[PLAN] subscriptionPlan query failed, falling back to id-only query:",
+      queryErr?.message
+    );
+    try {
+      // Use parameterised raw SQL to avoid injection
+      const fallback = await db.execute(
+        sql`SELECT id FROM "cafeterias" WHERE id = ${cafeteriaId} LIMIT 1`
+      );
+      const rows: any[] = fallback?.rows ?? (Array.isArray(fallback) ? fallback : []);
+      if (rows.length > 0) {
+        // Cafeteria exists but subscriptionPlan column is missing — treat as starter
+        console.warn("[PLAN] Cafeteria found via fallback, defaulting to starter plan");
+        return { plan: "starter", limits: PLAN_LIMITS.starter };
+      }
+    } catch (fallbackErr: any) {
+      console.error("[PLAN] Fallback query also failed:", fallbackErr?.message);
+    }
+    throw new Error(`[PLAN] Cafeteria not found (id=${cafeteriaId})`);
+  }
 
   if (result.length === 0) {
-    throw new Error("[PLAN] Cafeteria not found");
+    throw new Error(`[PLAN] Cafeteria not found (id=${cafeteriaId})`);
   }
 
   const plan = (result[0].subscriptionPlan as PlanName) || "starter";

@@ -11,8 +11,14 @@ import { registerOAuthRoutes } from "../server/_core/oauth.js";
 import { appRouter } from "../server/routers.js";
 import { createContextSupabase as createContext } from "../server/_core/context-supabase.js";
 import { handleStripeWebhook } from "../server/webhooks/stripe.js";
+import { runStartupMigrations } from "../server/utils/startupMigration.js";
 
 console.log("[API] Starting serverless function initialization...");
+
+// Run startup migrations (idempotent — safe to call on every cold start)
+runStartupMigrations().catch((err) =>
+  console.error("[API] Startup migration failed:", err)
+);
 
 const app = express();
 
