@@ -23,7 +23,7 @@ export function getAvailableTablesInSection(
   sectionId: string
 ): CafeteriaTable[] {
   return tables.filter(
-    (table) => table.sectionId === sectionId && table.status === "free"
+    (table) => table.sectionId === sectionId && table.status === "available"
   );
 }
 
@@ -48,7 +48,7 @@ export function getAvailableTablesByCapacity(
 ): CafeteriaTable[] {
   return tables.filter(
     (table) =>
-      table.status === "free" && (table.capacity || 0) >= requiredCapacity
+      table.status === "available" && (table.capacity || 0) >= requiredCapacity
   );
 }
 
@@ -115,8 +115,8 @@ export function getCafeteriaOccupancy(
   occupancyRate: number;
   sectionStats: ReturnType<typeof getSectionStats>[];
 } {
-  const availableTables = tables.filter((t) => t.status === "free");
-  const occupiedTables = tables.filter((t) => t.status !== "free" && t.status !== null);
+  const availableTables = tables.filter((t) => t.status === "available");
+  const occupiedTables = tables.filter((t) => t.status !== "available" && t.status !== null);
   const totalCapacity = tables.reduce((sum, table) => sum + (table.capacity || 0), 0);
   const occupancyRate = tables.length > 0 ? (occupiedTables.length / tables.length) * 100 : 0;
   const sectionStats = sections.map((section) => getSectionStats(tables, section));
@@ -184,7 +184,7 @@ export function getTableStatusDistribution(
   tables: CafeteriaTable[]
 ): Record<string, number> {
   const distribution: Record<string, number> = {
-    free: 0,
+    available: 0,
     occupied: 0,
     in_progress: 0,
     ready: 0,
@@ -192,7 +192,7 @@ export function getTableStatusDistribution(
   };
 
   tables.forEach((table) => {
-    const status = table.status || "free";
+    const status = table.status || "available";
     if (status in distribution) {
       distribution[status]++;
     }
