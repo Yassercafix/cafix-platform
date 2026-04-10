@@ -141,10 +141,16 @@ export default function CafeteriaTables() {
       toast.error(isRTL ? 'أدخل اسم القسم' : 'Enter section name');
       return;
     }
-    createSectionMutation.mutate({
-      cafeteriaId,
-      name: sectionForm.name.trim(),
-    });
+    
+    try {
+      await createSectionMutation.mutateAsync({
+        cafeteriaId,
+        name: sectionForm.name.trim(),
+      });
+      // Success is handled in mutation onSuccess, but we can also ensure it here
+    } catch (err) {
+      // Error is handled in mutation onError
+    }
   };
 
   const handleAddTable = async () => {
@@ -153,12 +159,17 @@ export default function CafeteriaTables() {
       toast.error(isRTL ? 'يرجى ملء جميع الحقول' : 'Please fill all fields');
       return;
     }
-    createTableMutation.mutate({
-      cafeteriaId,
-      sectionId: tableForm.sectionId,
-      tableNumber: parseInt(tableForm.tableNumber),
-      capacity: parseInt(tableForm.capacity),
-    });
+    
+    try {
+      await createTableMutation.mutateAsync({
+        cafeteriaId,
+        sectionId: tableForm.sectionId,
+        tableNumber: parseInt(tableForm.tableNumber),
+        capacity: parseInt(tableForm.capacity),
+      });
+    } catch (err) {
+      // Error is handled in mutation onError
+    }
   };
 
   const generateQR = async (table: TableItem) => {
