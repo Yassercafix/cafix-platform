@@ -368,9 +368,11 @@ export default function CafeteriaTables() {
       <Dialog open={showAddSectionDialog} onOpenChange={setShowAddSectionDialog}>
         <DialogContent className="max-w-md" dir={isRTL ? 'rtl' : 'ltr'}>
           <DialogHeader><DialogTitle>{isRTL ? 'إضافة قسم جديد' : 'Add New Section'}</DialogTitle></DialogHeader>
-          <div className="py-4">
-            <Label>{isRTL ? 'اسم القسم' : 'Section Name'}</Label>
-            <Input value={sectionForm.name} onChange={e => setSectionForm({ name: e.target.value })} className="mt-1" placeholder={isRTL ? 'مثال: الصالة الرئيسية، التراس' : 'e.g. Main Hall, Terrace'} />
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>{isRTL ? 'اسم القسم' : 'Section Name'}</Label>
+              <Input value={sectionForm.name} onChange={e => setSectionForm({ name: e.target.value })} className="mt-1" placeholder={isRTL ? 'مثال: الصالة الرئيسية، التراس' : 'e.g. Main Hall, Terrace'} />
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowAddSectionDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
