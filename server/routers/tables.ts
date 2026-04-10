@@ -132,7 +132,7 @@ export const tablesRouter = router({
         sectionId: input.sectionId,
         tableNumber: input.tableNumber,
         capacity: input.capacity,
-        status: "free",
+        status: "available",
         tableToken,
         createdAt: now,
       });
@@ -144,7 +144,7 @@ export const tablesRouter = router({
         sectionId: input.sectionId,
         tableNumber: input.tableNumber,
         capacity: input.capacity,
-        status: "free",
+        status: "available",
         tableToken,
         createdAt: now,
       };
@@ -187,7 +187,7 @@ export const tablesRouter = router({
     .input(
       z.object({
         tableId: z.string(),
-        status: z.enum(["free", "occupied", "in_progress", "ready", "served"]),
+        status: z.enum(["available", "occupied", "in_progress", "ready", "served"]),
       })
     )
     .mutation(async ({ input }) => {

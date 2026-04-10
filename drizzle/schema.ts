@@ -42,7 +42,7 @@ export const ledgerTypeEnum = pgEnum("ledger_type", [
   "points_cancelled",
 ]);
 export const periodTypeEnum = pgEnum("period_type", ["global_first_time", "special_grant"]);
-export const tableStatusEnum = pgEnum("table_status", ["free", "occupied", "in_progress", "ready", "served"]);
+export const tableStatusEnum = pgEnum("table_status", ["available", "occupied", "in_progress", "ready", "served"]);
 export const orderStatusEnum = pgEnum("order_status", ["created", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"]);
 export const orderItemStatusEnum = pgEnum("order_item_status", [
   "created",
@@ -445,7 +445,7 @@ export const cafeteriaTables = pgTable(
     sectionId: text("sectionId"),
     tableNumber: integer("tableNumber").notNull(),
     capacity: integer("capacity"),
-    status: tableStatusEnum("status").default("free"),
+    status: tableStatusEnum("status").default("available"),
     tableToken: varchar("tableToken", { length: 64 }).unique(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   }
@@ -661,7 +661,7 @@ export type InsertOrder = typeof orders.$inferInsert;
 
 export type OrderStatus = "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid" | "cancelled";
 export type OrderItemStatus = "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid" | "cancelled";
-export type TableStatus = "free" | "occupied" | "in_progress" | "ready" | "served";
+export type TableStatus = "available" | "occupied" | "in_progress" | "ready" | "served";
 
 // ============================================================================
 // 20. ORDER ITEMS TABLE - Individual Items in Orders
