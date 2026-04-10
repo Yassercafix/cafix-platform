@@ -314,11 +314,21 @@ export const authSupabaseRouter = router({
           .limit(1);
         userData = marketerRow[0];
       } else if (ctx.user.role === "cafeteria_admin") {
-        const cafeteriaRow = await db
+        // First try to find cafeteria by id (ctx.user.id may already be cafeteria.id)
+        let cafeteriaRow = await db
           .select()
           .from(cafeterias)
           .where(eq(cafeterias.id, ctx.user.id))
           .limit(1);
+        // If not found by id, try by loginUsername (email) — this handles the case
+        // where ctx.user.id is a users.id (UUID) rather than cafeterias.id (nanoid)
+        if (cafeteriaRow.length === 0 && ctx.user.email) {
+          cafeteriaRow = await db
+            .select()
+            .from(cafeterias)
+            .where(eq(cafeterias.loginUsername, ctx.user.email))
+            .limit(1);
+        }
         userData = cafeteriaRow[0];
       } else {
         const staffRow = await db
@@ -329,13 +339,21 @@ export const authSupabaseRouter = router({
         userData = staffRow[0];
       }
 
+      // For cafeteria_admin, the cafeteriaId IS the cafeteria's own id (userData.id)
+      // because the cafeterias table does not have a separate cafeteriaId column.
+      // For staff, cafeteriaId comes from cafeteriaStaff.cafeteriaId.
+      const resolvedCafeteriaId =
+        ctx.user.role === 'cafeteria_admin'
+          ? (userData?.id ?? null)
+          : (userData?.cafeteriaId ?? null);
+
       return {
         id: ctx.user.id,
         role: ctx.user.role,
         name: userData?.name,
         email: userData?.email || userData?.loginUsername,
         referenceCode: userData?.referenceCode,
-        cafeteriaId: userData?.cafeteriaId,
+        cafeteriaId: resolvedCafeteriaId,
         marketerId: ctx.user.role === 'marketer' ? ctx.user.id : userData?.marketerId,
         parentId: userData?.parentId,
         country: userData?.country,
