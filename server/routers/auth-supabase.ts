@@ -314,19 +314,24 @@ export const authSupabaseRouter = router({
           .limit(1);
         userData = marketerRow[0];
       } else if (ctx.user.role === "cafeteria_admin") {
-        // First try to find cafeteria by id (ctx.user.id may already be cafeteria.id)
-        let cafeteriaRow = await db
-          .select()
-          .from(cafeterias)
-          .where(eq(cafeterias.id, ctx.user.id))
-          .limit(1);
-        // If not found by id, try by loginUsername (email) — this handles the case
-        // where ctx.user.id is a users.id (UUID) rather than cafeterias.id (nanoid)
-        if (cafeteriaRow.length === 0 && ctx.user.email) {
+        // PRIMARY: look up cafeteria by loginUsername (email).
+        // ctx.user.id may be a users.id (UUID from users table) rather than
+        // cafeterias.id (nanoid), so email is the authoritative linkage key.
+        let cafeteriaRow: any[] = [];
+        if (ctx.user.email) {
           cafeteriaRow = await db
             .select()
             .from(cafeterias)
             .where(eq(cafeterias.loginUsername, ctx.user.email))
+            .limit(1);
+        }
+        // FALLBACK: if email lookup fails, try by id (handles legacy records
+        // where ctx.user.id already is cafeterias.id)
+        if (cafeteriaRow.length === 0) {
+          cafeteriaRow = await db
+            .select()
+            .from(cafeterias)
+            .where(eq(cafeterias.id, ctx.user.id))
             .limit(1);
         }
         userData = cafeteriaRow[0];
@@ -342,10 +347,11 @@ export const authSupabaseRouter = router({
       // For cafeteria_admin, the cafeteriaId IS the cafeteria's own id (userData.id)
       // because the cafeterias table does not have a separate cafeteriaId column.
       // For staff, cafeteriaId comes from cafeteriaStaff.cafeteriaId.
+      // We also check ctx.user.cafeteriaId as a fallback if userData lookup failed.
       const resolvedCafeteriaId =
         ctx.user.role === 'cafeteria_admin'
-          ? (userData?.id ?? null)
-          : (userData?.cafeteriaId ?? null);
+          ? (userData?.id ?? ctx.user.cafeteriaId ?? null)
+          : (userData?.cafeteriaId ?? ctx.user.cafeteriaId ?? null);
 
       return {
         id: ctx.user.id,

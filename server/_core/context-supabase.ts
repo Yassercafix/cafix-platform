@@ -15,6 +15,7 @@ export type TrpcContext = {
     email: string;
     name?: string;
     referenceCode?: string;
+    cafeteriaId?: string | null;
   } | null;
 };
 
@@ -145,6 +146,7 @@ async function getUserFromDatabase(
       email: userRow[0].email,
       name: userRow[0].name,
       referenceCode: userRow[0].referenceCode,
+      cafeteriaId: userRow[0].cafeteriaId,
     };
   }
 
@@ -179,6 +181,7 @@ async function getUserFromDatabase(
       email: cafeteriaRow[0].loginUsername,
       name: cafeteriaRow[0].name,
       referenceCode: cafeteriaRow[0].referenceCode,
+      cafeteriaId: cafeteriaRow[0].id,
     };
   }
 
@@ -195,6 +198,7 @@ async function getUserFromDatabase(
       role: staffRow[0].role || "waiter",
       email: staffRow[0].loginUsername,
       name: staffRow[0].name,
+      cafeteriaId: staffRow[0].cafeteriaId,
     };
   }
 
