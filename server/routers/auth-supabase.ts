@@ -12,16 +12,34 @@ const cookie = cookieModule as any;
 import bcryptjs from "bcryptjs";
 
 // Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+// The project URL is embedded as a fallback (same value used in context-supabase.ts)
+// so login works even when SUPABASE_URL is not explicitly set in the environment.
+const supabaseUrl =
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  "https://ztamzcpkegijqcgbgtnn.supabase.co";
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error("[Supabase Auth] ERROR: VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured");
+// signInWithPassword only requires the anon (public) key — the service role key
+// is only needed for admin operations such as createUser.  Using the anon key
+// as a fallback means login continues to work even when SUPABASE_SERVICE_ROLE_KEY
+// is not present in the environment.
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseAnonKey =
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  "";
+
+// Prefer the service-role key (needed for admin.createUser); fall back to the
+// anon key which is sufficient for signInWithPassword.
+const supabaseAuthKey = supabaseServiceKey || supabaseAnonKey;
+
+if (!supabaseAuthKey) {
+  console.error("[Supabase Auth] ERROR: Neither SUPABASE_SERVICE_ROLE_KEY nor SUPABASE_ANON_KEY is configured");
 }
 
 let supabase: any = null;
-if (supabaseUrl && supabaseServiceKey) {
-  supabase = createClient(supabaseUrl, supabaseServiceKey, {
+if (supabaseUrl && supabaseAuthKey) {
+  supabase = createClient(supabaseUrl, supabaseAuthKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -157,19 +175,13 @@ export const authSupabaseRouter = router({
         if (!supabase) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "Supabase is not configured. Please set VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.",
+            message: "Supabase is not configured. Please set SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY environment variables.",
           });
         }
 
-        const db = await getDb();
-        if (!db) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Database not available",
-          });
-        }
-
-        // Sign in with Supabase
+        // Sign in with Supabase FIRST — DB is only needed after auth succeeds.
+        // Calling getDb() before signInWithPassword caused 500 errors on cold
+        // starts and transient DB connection failures even for valid credentials.
         const { data, error } = await supabase.auth.signInWithPassword({
           email: input.email,
           password: input.password,
@@ -182,13 +194,24 @@ export const authSupabaseRouter = router({
             message: error?.message || "Invalid email or password",
           });
         }
+
+        // Auth succeeded — now resolve the user role from the database.
+        let db: any;
+        try {
+          db = await getDb();
+        } catch (dbErr: any) {
+          console.error("[auth-supabase.login] DB connection failed:", dbErr?.message);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database connection failed. Please try again.",
+          });
+        }
         if (!db) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Database not available",
           });
         }
-
         // Determine user role from database
         const roleInfo = await determineUserRole(input.email, db);
 
