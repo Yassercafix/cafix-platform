@@ -225,14 +225,14 @@ export const authSupabaseRouter = router({
           email: input.email,
           sessionToken: data.session.access_token,
         };
-      } catch (error) {
+       } catch (error) {
         if (error instanceof TRPCError) throw error;
-
-        console.error("[auth-supabase.login ERROR]:", error);
-
+        const errMsg = error instanceof Error ? error.message : String(error);
+        const errStack = error instanceof Error ? error.stack : undefined;
+        console.error("[auth-supabase.login ERROR]:", errMsg, errStack);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "An unexpected error occurred. Please try again.",
+          message: `Login failed: ${errMsg}`,
         });
       }
     }),
