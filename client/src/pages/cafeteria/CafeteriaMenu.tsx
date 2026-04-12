@@ -321,7 +321,7 @@ export default function CafeteriaMenu() {
                               {item.categoryName || (isRTL ? 'بدون فئة' : 'No category')}
                             </span>
                           </TableCell>
-                          <TableCell className="font-bold text-blue-600">{item.price} {isRTL ? 'نقطة' : 'pts'}</TableCell>
+                          <TableCell className="font-bold text-blue-600">{item.price}</TableCell>
                           <TableCell>
                             {item.isAvailable ? (
                               <span className="inline-flex items-center gap-1 text-green-600 text-xs font-bold">
@@ -373,7 +373,7 @@ export default function CafeteriaMenu() {
           <DialogHeader><DialogTitle>{isRTL ? 'إضافة فئة جديدة' : 'Add New Category'}</DialogTitle></DialogHeader>
           <div className="py-4">
             <Label>{isRTL ? 'اسم الفئة' : 'Category Name'}</Label>
-            <Input value={categoryForm.name} onChange={e => setCategoryForm({ name: e.target.value })} className="mt-1" placeholder={isRTL ? 'مثال: المشروبات' : 'e.g. Drinks'} />
+            <Input value={categoryForm.name} onChange={e => setCategoryForm({ name: e?.target?.value || '' })} className="mt-1" placeholder={isRTL ? 'مثال: المشروبات' : 'e.g. Drinks'} />
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowAddCategoryDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
@@ -390,7 +390,7 @@ export default function CafeteriaMenu() {
           <DialogHeader><DialogTitle>{isRTL ? 'تعديل الفئة' : 'Edit Category'}</DialogTitle></DialogHeader>
           <div className="py-4">
             <Label>{isRTL ? 'اسم الفئة' : 'Category Name'}</Label>
-            <Input value={categoryForm.name} onChange={e => setCategoryForm({ name: e.target.value })} className="mt-1" />
+            <Input value={categoryForm.name} onChange={e => setCategoryForm({ name: e?.target?.value || '' })} className="mt-1" />
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowDeleteCategoryDialog(true)} className="text-red-600 border-red-200 hover:bg-red-50">
@@ -413,7 +413,7 @@ export default function CafeteriaMenu() {
           <div className="space-y-4 py-2">
             <div>
               <Label>{isRTL ? 'اسم الصنف *' : 'Item Name *'}</Label>
-              <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} className="mt-1" />
+              <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e?.target?.value || '' })} className="mt-1" />
             </div>
             <div>
               <Label>{isRTL ? 'الفئة *' : 'Category *'}</Label>
@@ -429,11 +429,11 @@ export default function CafeteriaMenu() {
             </div>
             <div>
               <Label>{isRTL ? 'السعر *' : 'Price *'}</Label>
-              <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e.target.value })} className="mt-1" />
+              <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e?.target?.value || '' })} className="mt-1" />
             </div>
             <div>
               <Label>{isRTL ? 'الوصف' : 'Description'}</Label>
-              <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e.target.value })} className="mt-1" rows={2} />
+              <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e?.target?.value || '' })} className="mt-1" rows={2} />
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={itemForm.isAvailable} onCheckedChange={v => setItemForm({ ...itemForm, isAvailable: v })} />
@@ -456,7 +456,7 @@ export default function CafeteriaMenu() {
           <div className="space-y-4 py-2">
             <div>
               <Label>{isRTL ? 'اسم الصنف *' : 'Item Name *'}</Label>
-              <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} className="mt-1" />
+              <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e?.target?.value || '' })} className="mt-1" />
             </div>
             <div>
               <Label>{isRTL ? 'الفئة *' : 'Category *'}</Label>
@@ -469,11 +469,11 @@ export default function CafeteriaMenu() {
             </div>
             <div>
               <Label>{isRTL ? 'السعر *' : 'Price *'}</Label>
-              <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e.target.value })} className="mt-1" />
+              <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e?.target?.value || '' })} className="mt-1" />
             </div>
             <div>
               <Label>{isRTL ? 'الوصف' : 'Description'}</Label>
-              <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e.target.value })} className="mt-1" rows={2} />
+              <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e?.target?.value || '' })} className="mt-1" rows={2} />
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={itemForm.isAvailable} onCheckedChange={v => setItemForm({ ...itemForm, isAvailable: v })} />

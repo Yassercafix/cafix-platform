@@ -128,7 +128,8 @@ export default function CafeteriaRecharge() {
   }, [cafeteriaId, authLoading, fetchRequests]);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = e?.target?.value;
+    if (value === undefined) return;
     
     // Validate English numbers only
     if (value && !isEnglishNumber(value)) {
@@ -292,7 +293,9 @@ export default function CafeteriaRecharge() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col" dir={isRTL ? 'rtl' : 'ltr'}>
       <DashboardHeader 
-        title="Recharge"
+        title={isRTL ? 'شحن النقاط' : 'Recharge'}
+        showBackButton={true}
+        backPath="/dashboard/cafeteria-admin"
         onMenuClick={() => setMenuOpen(!menuOpen)} 
       />
 

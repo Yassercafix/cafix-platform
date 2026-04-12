@@ -56,7 +56,12 @@ export default function CafeteriaDashboard() {
       }
 
       const orders = ordersRes.data || [];
-      const activeOrders = orders.filter((order: any) => !['paid', 'cancelled'].includes(String(order.status || '').toLowerCase())).length;
+      // Active orders are those not in 'paid', 'cancelled', or 'completed' status
+      const activeOrders = orders.filter((order: any) => {
+        const status = String(order.status || '').toLowerCase();
+        return !['paid', 'cancelled', 'completed'].includes(status);
+      }).length;
+      
       const totalRevenue = orders
         .filter((order: any) => String(order.status || '').toLowerCase() === 'paid')
         .reduce((sum: number, order: any) => sum + Number(order.totalAmount || 0), 0);

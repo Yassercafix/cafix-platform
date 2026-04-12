@@ -65,20 +65,26 @@ export default function CafeteriaTables() {
   );
 
   const sections: Section[] = useMemo(() => {
-    return (sectionsQuery.data || []).map((section: any) => ({
+    const data = (sectionsQuery.data || []).map((section: any) => ({
       id: section.id,
       name: section.name,
       cafeteriaId: section.cafeteriaId,
     }));
-  }, [sectionsQuery.data]);
+    
+    // Ensure "All" section exists if no sections are returned
+    if (data.length === 0 && !sectionsQuery.isLoading) {
+      return [{ id: 'all-default', name: isRTL ? 'الكل' : 'All', cafeteriaId: cafeteriaId || '' }];
+    }
+    return data;
+  }, [sectionsQuery.data, sectionsQuery.isLoading, isRTL, cafeteriaId]);
 
   const defaultSectionId = sections[0]?.id || '';
 
   useEffect(() => {
-    if (!tableForm.sectionId && defaultSectionId) {
+    if ((!tableForm.sectionId || !sections.find(s => s.id === tableForm.sectionId)) && defaultSectionId) {
       setTableForm((current) => ({ ...current, sectionId: defaultSectionId }));
     }
-  }, [defaultSectionId, tableForm.sectionId]);
+  }, [defaultSectionId, tableForm.sectionId, sections]);
 
   const tables: TableItem[] = useMemo(() => {
     return (tablesQuery.data || []).map((table: any) => ({
@@ -236,6 +242,41 @@ export default function CafeteriaTables() {
 
     printWindow.document.write(html);
     printWindow.document.close();
+
+    // Wait for all images to load before printing
+    const images = printWindow.document.getElementsByTagName('img');
+    let loadedCount = 0;
+    const totalImages = images.length;
+
+    if (totalImages === 0) {
+      printWindow.print();
+      printWindow.close();
+    } else {
+      Array.from(images).forEach(img => {
+        if (img.complete) {
+          loadedCount++;
+          if (loadedCount === totalImages) {
+            printWindow.print();
+            printWindow.close();
+          }
+        } else {
+          img.onload = () => {
+            loadedCount++;
+            if (loadedCount === totalImages) {
+              printWindow.print();
+              printWindow.close();
+            }
+          };
+          img.onerror = () => {
+            loadedCount++;
+            if (loadedCount === totalImages) {
+              printWindow.print();
+              printWindow.close();
+            }
+          };
+        }
+      });
+    }
   };
 
   if (authLoading || loading) {
@@ -374,7 +415,7 @@ export default function CafeteriaTables() {
           <div className="space-y-4 py-4">
             <div>
               <Label>{isRTL ? 'اسم القسم' : 'Section Name'}</Label>
-              <Input value={sectionForm.name} onChange={e => setSectionForm({ name: e.target.value })} className="mt-1" placeholder={isRTL ? 'مثال: الصالة الرئيسية، التراس' : 'e.g. Main Hall, Terrace'} />
+              <Input value={sectionForm.name} onChange={e => setSectionForm({ name: e?.target?.value || '' })} className="mt-1" placeholder={isRTL ? 'مثال: الصالة الرئيسية، التراس' : 'e.g. Main Hall, Terrace'} />
             </div>
           </div>
           <DialogFooter className="gap-2">
@@ -392,7 +433,7 @@ export default function CafeteriaTables() {
           <div className="space-y-4 py-2">
             <div>
               <Label>{isRTL ? 'رقم الطاولة' : 'Table Number'}</Label>
-              <Input type="number" value={tableForm.tableNumber} onChange={e => setTableForm({ ...tableForm, tableNumber: e.target.value })} className="mt-1" />
+              <Input type="number" value={tableForm.tableNumber} onChange={e => setTableForm({ ...tableForm, tableNumber: e?.target?.value || '' })} className="mt-1" />
             </div>
             <div>
               <Label>{isRTL ? 'القسم' : 'Section'}</Label>
@@ -405,7 +446,7 @@ export default function CafeteriaTables() {
             </div>
             <div>
               <Label>{isRTL ? 'السعة (عدد الأشخاص)' : 'Capacity (Persons)'}</Label>
-              <Input type="number" value={tableForm.capacity} onChange={e => setTableForm({ ...tableForm, capacity: e.target.value })} className="mt-1" />
+              <Input type="number" value={tableForm.capacity} onChange={e => setTableForm({ ...tableForm, capacity: e?.target?.value || '' })} className="mt-1" />
             </div>
           </div>
           <DialogFooter className="gap-2">
