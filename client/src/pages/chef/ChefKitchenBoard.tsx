@@ -17,6 +17,7 @@ import {
   Bell,
   RefreshCw,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
@@ -31,7 +32,7 @@ interface OrderItem {
 interface Order {
   id: string;
   tableNumber: string;
-  status: 'pending' | 'preparing' | 'ready';
+  status: 'pending' | 'preparing';
   createdAt: string;
   items: OrderItem[];
 }
@@ -41,9 +42,11 @@ export default function ChefKitchenBoard() {
   const { language } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [shiftWarning, setShiftWarning] = useState(false);
 
   const isRTL = language === 'ar';
   const cafeteriaId = user?.cafeteriaId;
+  const staffId = (user as any)?.id;
 
   // Tick every second for elapsed time
   useEffect(() => {
@@ -56,6 +59,22 @@ export default function ChefKitchenBoard() {
     { label: isRTL ? 'لوحة المطبخ' : 'Kitchen Board', path: '/dashboard/chef/kitchen-board', icon: <UtensilsCrossed className="w-5 h-5" /> },
   ];
 
+  // Check active shift
+  const { data: activeShiftData, isLoading: shiftLoading } = trpc.shifts.getStaffShifts.useQuery(
+    { staffId, cafeteriaId: cafeteriaId || '', status: 'active' },
+    { enabled: !!staffId && !!cafeteriaId }
+  );
+
+  const hasActiveShift = activeShiftData && activeShiftData.length > 0;
+
+  useEffect(() => {
+    if (!shiftLoading && !hasActiveShift) {
+      setShiftWarning(true);
+    } else {
+      setShiftWarning(false);
+    }
+  }, [hasActiveShift, shiftLoading]);
+
   // Fetch all orders for this cafeteria
   const { data: allOrders, isLoading: ordersLoading, refetch } = trpc.ordersPhase2.getOrders.useQuery(
     { cafeteriaId: cafeteriaId || '' },
@@ -65,34 +84,43 @@ export default function ChefKitchenBoard() {
   const markPreparingMutation = trpc.ordersPhase2.markPreparing.useMutation({
     onSuccess: () => {
       toast.success(isRTL ? 'بدأ التحضير' : 'Started preparing');
+      console.log('[CHEF_ACTION] Order moved to preparing');
       refetch();
     },
-    onError: (err) => toast.error(`Error: ${err.message}`),
+    onError: (err) => {
+      const errorMsg = err.message || (isRTL ? 'خطأ في تحديث الحالة' : 'Error updating status');
+      toast.error(errorMsg);
+      console.error('[CHEF_ACTION_ERROR] Failed to start preparing:', err);
+    },
   });
 
   const markReadyMutation = trpc.ordersPhase2.markReady.useMutation({
     onSuccess: () => {
       toast.success(isRTL ? 'الطلب جاهز' : 'Order ready');
+      console.log('[CHEF_ACTION] Order moved to ready');
       refetch();
     },
-    onError: (err) => toast.error(`Error: ${err.message}`),
+    onError: (err) => {
+      const errorMsg = err.message || (isRTL ? 'خطأ في تحديث الحالة' : 'Error updating status');
+      toast.error(errorMsg);
+      console.error('[CHEF_ACTION_ERROR] Failed to mark ready:', err);
+    },
   });
 
   // Normalize and organize orders into columns
-  const { pendingOrders, preparingOrders, readyOrders } = useMemo(() => {
-    if (!allOrders) return { pendingOrders: [], preparingOrders: [], readyOrders: [] };
+  const { pendingOrders, preparingOrders } = useMemo(() => {
+    if (!allOrders) return { pendingOrders: [], preparingOrders: [] };
 
     const normalized = allOrders
       .map((o: any) => ({
         ...o,
         status: normalizeStatus(o.status),
       }))
-      .filter((o: any) => o.status !== 'served');
+      .filter((o: any) => ['pending', 'preparing'].includes(o.status));
 
     return {
       pendingOrders: normalized.filter((o: any) => o.status === 'pending'),
       preparingOrders: normalized.filter((o: any) => o.status === 'preparing'),
-      readyOrders: normalized.filter((o: any) => o.status === 'ready'),
     };
   }, [allOrders]);
 
@@ -125,6 +153,21 @@ export default function ChefKitchenBoard() {
       <DashboardNavigation isOpen={menuOpen} onClose={() => setMenuOpen(false)} items={navigationItems} />
 
       <main className="p-4 md:p-6">
+        {/* Shift Warning */}
+        {shiftWarning && (
+          <div className="mb-6 p-4 rounded-lg bg-red-900/30 border border-red-600 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-red-300">
+                {isRTL ? 'لا توجد وردية نشطة' : 'No Active Shift'}
+              </p>
+              <p className="text-xs text-red-200 mt-1">
+                {isRTL ? 'يجب أن تكون لديك وردية نشطة لتنفيذ الإجراءات' : 'You must have an active shift to perform actions'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Header Stats */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
@@ -137,8 +180,8 @@ export default function ChefKitchenBoard() {
               </h2>
               <p className="text-slate-400 text-sm">
                 {isRTL
-                  ? `${pendingOrders.length + preparingOrders.length + readyOrders.length} طلبات قيد الانتظار`
-                  : `${pendingOrders.length + preparingOrders.length + readyOrders.length} orders waiting`}
+                  ? `${pendingOrders.length} معلقة، ${preparingOrders.length} قيد التحضير`
+                  : `${pendingOrders.length} pending, ${preparingOrders.length} preparing`}
               </p>
             </div>
           </div>
@@ -152,25 +195,26 @@ export default function ChefKitchenBoard() {
               variant="ghost"
               onClick={() => refetch()}
               className="text-slate-300 hover:text-white"
+              disabled={ordersLoading}
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </div>
 
         {/* Kanban Columns */}
-        {ordersLoading ? (
+        {ordersLoading && pendingOrders.length === 0 && preparingOrders.length === 0 ? (
           <div className="flex items-center justify-center py-32">
             <Loader2 className="animate-spin w-8 h-8 text-slate-400" />
           </div>
-        ) : pendingOrders.length === 0 && preparingOrders.length === 0 && readyOrders.length === 0 ? (
+        ) : pendingOrders.length === 0 && preparingOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-500">
             <UtensilsCrossed className="w-20 h-20 mb-4 opacity-20" />
             <p className="text-xl font-bold">{isRTL ? 'لا توجد طلبات حالياً' : 'No active orders'}</p>
             <p className="text-sm">{isRTL ? 'استمتع ببعض الراحة!' : 'Enjoy some rest!'}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Column 1: Pending Orders */}
             <KanbanColumn
               title={isRTL ? 'الطلبات المعلقة' : 'Pending Orders'}
@@ -178,10 +222,17 @@ export default function ChefKitchenBoard() {
               status="pending"
               getTableLabel={getTableLabel}
               getTimeInKitchen={getTimeInKitchen}
-              onAction={(orderId) => markPreparingMutation.mutate({ orderId })}
+              onAction={(orderId) => {
+                if (!hasActiveShift) {
+                  toast.error(isRTL ? 'يجب أن تكون لديك وردية نشطة' : 'You must have an active shift');
+                  return;
+                }
+                markPreparingMutation.mutate({ orderId });
+              }}
               actionLabel={isRTL ? 'بدء التحضير' : 'Start Cooking'}
               isLoading={markPreparingMutation.isPending}
               isRTL={isRTL}
+              disabled={!hasActiveShift}
             />
 
             {/* Column 2: Preparing Orders */}
@@ -191,24 +242,17 @@ export default function ChefKitchenBoard() {
               status="preparing"
               getTableLabel={getTableLabel}
               getTimeInKitchen={getTimeInKitchen}
-              onAction={(orderId) => markReadyMutation.mutate({ orderId })}
+              onAction={(orderId) => {
+                if (!hasActiveShift) {
+                  toast.error(isRTL ? 'يجب أن تكون لديك وردية نشطة' : 'You must have an active shift');
+                  return;
+                }
+                markReadyMutation.mutate({ orderId });
+              }}
               actionLabel={isRTL ? 'جاهز للتسليم' : 'Mark as Ready'}
               isLoading={markReadyMutation.isPending}
               isRTL={isRTL}
-            />
-
-            {/* Column 3: Ready Orders */}
-            <KanbanColumn
-              title={isRTL ? 'جاهزة للتقديم' : 'Ready Orders'}
-              orders={readyOrders}
-              status="ready"
-              getTableLabel={getTableLabel}
-              getTimeInKitchen={getTimeInKitchen}
-              onAction={() => {}}
-              actionLabel=""
-              isLoading={false}
-              isRTL={isRTL}
-              readOnly={true}
+              disabled={!hasActiveShift}
             />
           </div>
         )}
@@ -230,14 +274,14 @@ function normalizeStatus(status: string): string {
 interface KanbanColumnProps {
   title: string;
   orders: any[];
-  status: 'pending' | 'preparing' | 'ready';
+  status: 'pending' | 'preparing';
   getTableLabel: (order: any) => string;
   getTimeInKitchen: (createdAt: string) => string;
   onAction: (orderId: string) => void;
   actionLabel: string;
   isLoading: boolean;
   isRTL: boolean;
-  readOnly?: boolean;
+  disabled?: boolean;
 }
 
 function KanbanColumn({
@@ -250,24 +294,21 @@ function KanbanColumn({
   actionLabel,
   isLoading,
   isRTL,
-  readOnly = false,
+  disabled = false,
 }: KanbanColumnProps) {
   const columnColors = {
     pending: 'bg-slate-800 border-slate-700',
     preparing: 'bg-slate-800 border-orange-600',
-    ready: 'bg-slate-800 border-green-600',
   };
 
   const headerColors = {
     pending: 'bg-slate-700 border-b border-slate-600',
     preparing: 'bg-orange-900/30 border-b border-orange-600',
-    ready: 'bg-green-900/30 border-b border-green-600',
   };
 
   const badgeColors = {
     pending: 'bg-slate-600 text-slate-200',
     preparing: 'bg-orange-600 text-white',
-    ready: 'bg-green-600 text-white',
   };
 
   return (
@@ -300,8 +341,8 @@ function KanbanColumn({
               actionLabel={actionLabel}
               isLoading={isLoading}
               status={status}
-              readOnly={readOnly}
               isRTL={isRTL}
+              disabled={disabled}
             />
           ))
         )}
@@ -318,9 +359,9 @@ interface OrderCardKitchenProps {
   onAction: (orderId: string) => void;
   actionLabel: string;
   isLoading: boolean;
-  status: 'pending' | 'preparing' | 'ready';
-  readOnly?: boolean;
+  status: 'pending' | 'preparing';
   isRTL: boolean;
+  disabled?: boolean;
 }
 
 function OrderCardKitchen({
@@ -331,13 +372,12 @@ function OrderCardKitchen({
   actionLabel,
   isLoading,
   status,
-  readOnly = false,
   isRTL,
+  disabled = false,
 }: OrderCardKitchenProps) {
   const statusBgColors = {
     pending: 'bg-slate-700',
     preparing: 'bg-orange-700/40 border border-orange-600',
-    ready: 'bg-green-700/40 border border-green-600',
   };
 
   return (
@@ -381,32 +421,25 @@ function OrderCardKitchen({
         </div>
 
         {/* Action Button */}
-        {!readOnly && actionLabel && (
-          <Button
-            size="sm"
-            className={`w-full text-white font-bold py-5 rounded-lg gap-2 ${
-              status === 'pending'
-                ? 'bg-orange-600 hover:bg-orange-700'
-                : 'bg-green-600 hover:bg-green-700'
-            }`}
-            onClick={() => onAction(order.id)}
-            disabled={isLoading}
-          >
-            {status === 'pending' ? (
-              <ChefHat className="w-4 h-4" />
-            ) : (
-              <Bell className="w-4 h-4" />
-            )}
-            {actionLabel}
-          </Button>
-        )}
-
-        {readOnly && (
-          <div className="flex items-center justify-center gap-1.5 text-xs text-green-400 py-2 bg-green-900/20 rounded border border-green-600/30">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            {isRTL ? 'جاهز للتسليم' : 'Ready for service'}
-          </div>
-        )}
+        <Button
+          size="sm"
+          className={`w-full text-white font-bold py-5 rounded-lg gap-2 ${
+            status === 'pending'
+              ? 'bg-orange-600 hover:bg-orange-700 disabled:bg-orange-600/50'
+              : 'bg-green-600 hover:bg-green-700 disabled:bg-green-600/50'
+          }`}
+          onClick={() => onAction(order.id)}
+          disabled={isLoading || disabled}
+        >
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : status === 'pending' ? (
+            <ChefHat className="w-4 h-4" />
+          ) : (
+            <Bell className="w-4 h-4" />
+          )}
+          {actionLabel}
+        </Button>
       </CardContent>
     </Card>
   );

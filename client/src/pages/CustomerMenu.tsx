@@ -75,14 +75,17 @@ export default function CustomerMenu() {
 
   const createOrderMutation = trpc.qrOrders.createCustomerOrder.useMutation({
     onSuccess: (order) => {
-      toast.success("Order submitted successfully!");
+      console.log(`[ORDER_CREATED] Customer order ${order.orderId} created successfully`);
+      toast.success("Order submitted successfully! Status: Pending");
       setCart([]);
       setTimeout(() => {
         navigate(`/order-confirmation/${order.orderId}`);
       }, 1000);
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to submit order");
+      const errorMsg = error.message || "Failed to submit order";
+      console.error('[ORDER_CREATION_ERROR]', errorMsg);
+      toast.error(errorMsg);
     },
   });
 
@@ -152,6 +155,7 @@ export default function CustomerMenu() {
       toast.error("Please add items to your order");
       return;
     }
+    console.log(`[ORDER_SUBMISSION] Submitting order with ${cart.length} items`);
     createOrderMutation.mutate({
       token: tableToken || "",
       items: cart.map((item) => ({

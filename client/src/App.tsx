@@ -18,6 +18,7 @@ import MarketerDashboard from "./pages/MarketerDashboard";
 import CafeteriaDashboard from "./pages/CafeteriaDashboard";
 import CustomerMenu from "./pages/CustomerMenu";
 import OrderTracking from "./pages/OrderTracking";
+import OrderConfirmation from "./pages/OrderConfirmation";
 import { useAuth } from "./_core/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -62,7 +63,7 @@ function Router() {
       <Route path={"/menu/:tableToken"} component={CustomerMenu} />
       <Route path={"/order/:tableToken"} component={CustomerMenu} />
       <Route path={"/order-tracking/:orderId"} component={OrderTracking} />
-      <Route path={"/order-confirmation/:orderId"} component={OrderTracking} />
+      <Route path={"/order-confirmation/:orderId"} component={OrderConfirmation} />
       
       {/* ===== OWNER DASHBOARD ROUTES ===== */}
       <Route path={"/dashboard/owner"} component={() => <ProtectedRoute component={OwnerDashboard} allowedRoles={["owner"]} />} />

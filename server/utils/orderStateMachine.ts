@@ -1,6 +1,7 @@
 /**
  * Order State Machine
  * Enforces strict order status transitions and role-based permissions
+ * Normalized to 4 states: pending, preparing, ready, served
  */
 
 import type { OrderStatus } from "../../drizzle/schema.js";
@@ -10,16 +11,19 @@ export type UserRole = "owner" | "marketer" | "cafeteria_admin" | "manager" | "w
 /**
  * Valid order state transitions
  * Maps current state to allowed next states
+ * 
+ * Flow: pending -> preparing -> ready -> served
  */
-const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  pending: ["created", "sent_to_kitchen", "cancelled"],
-  created: ["sent_to_kitchen", "cancelled"],
-  sent_to_kitchen: ["preparing", "cancelled"],
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  pending: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],
-  ready: ["served"],
-  served: ["paid"],
+  ready: ["served", "cancelled"],
+  served: ["paid"], // Paid is the final accounting state
   paid: [],
   cancelled: [],
+  // Legacy states mapping for compatibility during transition
+  created: ["pending", "preparing", "cancelled"],
+  sent_to_kitchen: ["preparing", "cancelled"],
 };
 
 /**
@@ -27,28 +31,27 @@ const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
  * Maps transition to allowed roles
  */
 const ROLE_PERMISSIONS: Record<string, UserRole[]> = {
-  "pending->created": ["waiter", "cafeteria_admin", "manager"],
-  "pending->sent_to_kitchen": ["waiter", "cafeteria_admin", "manager"],
-  "pending->cancelled": ["waiter", "cafeteria_admin", "manager"],
-  "created->sent_to_kitchen": ["waiter", "cafeteria_admin", "manager"],
-  "sent_to_kitchen->preparing": ["chef", "cafeteria_admin", "manager"],
+  "pending->preparing": ["chef", "cafeteria_admin", "manager"],
   "preparing->ready": ["chef", "cafeteria_admin", "manager"],
   "ready->served": ["waiter", "cafeteria_admin", "manager"],
   "served->paid": ["waiter", "cafeteria_admin", "manager"],
-  "created->cancelled": ["waiter", "cafeteria_admin", "manager"],
-  "sent_to_kitchen->cancelled": ["waiter", "cafeteria_admin", "manager"],
+  "pending->cancelled": ["waiter", "cafeteria_admin", "manager"],
   "preparing->cancelled": ["waiter", "cafeteria_admin", "manager"],
-  "ready->cancelled": ["manager"], // Only manager can cancel after ready
+  "ready->cancelled": ["manager", "cafeteria_admin"], 
+  // Legacy
+  "created->pending": ["waiter", "cafeteria_admin", "manager"],
+  "created->preparing": ["chef", "cafeteria_admin", "manager"],
+  "sent_to_kitchen->preparing": ["chef", "cafeteria_admin", "manager"],
 };
 
 /**
  * Check if a state transition is valid
  */
 export function isValidTransition(
-  currentStatus: OrderStatus,
-  nextStatus: OrderStatus
+  currentStatus: string,
+  nextStatus: string
 ): boolean {
-  const allowedNextStates = VALID_TRANSITIONS[currentStatus];
+  const allowedNextStates = VALID_TRANSITIONS[currentStatus as any] || [];
   return allowedNextStates.includes(nextStatus);
 }
 
@@ -56,8 +59,8 @@ export function isValidTransition(
  * Check if a user role can perform a specific transition
  */
 export function canUserPerformTransition(
-  currentStatus: OrderStatus,
-  nextStatus: OrderStatus,
+  currentStatus: string,
+  nextStatus: string,
   userRole: UserRole
 ): boolean {
   // First check if transition is valid
@@ -70,57 +73,38 @@ export function canUserPerformTransition(
   const allowedRoles = ROLE_PERMISSIONS[transitionKey];
 
   if (!allowedRoles) {
-    return false;
+    // If no specific role permission defined but transition is valid, 
+    // default to admin/manager only for safety
+    return ["cafeteria_admin", "manager", "owner"].includes(userRole);
   }
 
   return allowedRoles.includes(userRole);
 }
 
 /**
- * Get all valid next states for a given current state
- */
-export function getValidNextStates(currentStatus: OrderStatus): OrderStatus[] {
-  return VALID_TRANSITIONS[currentStatus] || [];
-}
-
-/**
- * Get allowed roles for a specific transition
- */
-export function getAllowedRolesForTransition(
-  currentStatus: OrderStatus,
-  nextStatus: OrderStatus
-): UserRole[] {
-  if (!isValidTransition(currentStatus, nextStatus)) {
-    return [];
-  }
-
-  const transitionKey = `${currentStatus}->${nextStatus}`;
-  return ROLE_PERMISSIONS[transitionKey] || [];
-}
-
-/**
  * Validate a state transition with detailed error message
  */
 export function validateTransition(
-  currentStatus: OrderStatus,
-  nextStatus: OrderStatus,
+  currentStatus: string,
+  nextStatus: string,
   userRole: UserRole
 ): { valid: boolean; error?: string } {
   // Check if transition is valid
   if (!isValidTransition(currentStatus, nextStatus)) {
-    const validStates = getValidNextStates(currentStatus);
+    const allowedNextStates = VALID_TRANSITIONS[currentStatus as any] || [];
     return {
       valid: false,
-      error: `Cannot transition from ${currentStatus} to ${nextStatus}. Valid states: ${validStates.join(", ")}`,
+      error: `Invalid transition from '${currentStatus}' to '${nextStatus}'. Allowed: ${allowedNextStates.join(", ")}`,
     };
   }
 
   // Check if user role can perform transition
   if (!canUserPerformTransition(currentStatus, nextStatus, userRole)) {
-    const allowedRoles = getAllowedRolesForTransition(currentStatus, nextStatus);
+    const transitionKey = `${currentStatus}->${nextStatus}`;
+    const allowedRoles = ROLE_PERMISSIONS[transitionKey] || ["admin"];
     return {
       valid: false,
-      error: `Role '${userRole}' cannot transition from ${currentStatus} to ${nextStatus}. Allowed roles: ${allowedRoles.join(", ")}`,
+      error: `Role '${userRole}' is not authorized for transition '${currentStatus}' -> '${nextStatus}'. Required: ${allowedRoles.join(", ")}`,
     };
   }
 
@@ -128,74 +112,28 @@ export function validateTransition(
 }
 
 /**
- * Get the next required state after current state
- * Useful for auto-progression workflows
- */
-export function getNextRequiredState(currentStatus: OrderStatus): OrderStatus | null {
-  const nextStates = getValidNextStates(currentStatus);
-  if (nextStates.length === 1) {
-    return nextStates[0];
-  }
-  return null;
-}
-
-/**
  * Check if an order can be cancelled
  */
-export function canBeCancelled(currentStatus: OrderStatus, userRole: UserRole): boolean {
+export function canBeCancelled(currentStatus: string, userRole: UserRole): boolean {
   if (currentStatus === "ready") {
-    // Only manager can cancel after ready
-    return userRole === "manager";
+    return ["manager", "cafeteria_admin"].includes(userRole);
   }
-
-  // Can cancel before ready
-  return ["created", "sent_to_kitchen", "preparing"].includes(currentStatus);
-}
-
-/**
- * Check if order is in a final state
- */
-export function isFinalState(status: OrderStatus): boolean {
-  return ["paid", "cancelled"].includes(status);
-}
-
-/**
- * Check if order is still in progress
- */
-export function isInProgress(status: OrderStatus): boolean {
-  return !isFinalState(status);
+  return ["pending", "created", "preparing", "sent_to_kitchen"].includes(currentStatus);
 }
 
 /**
  * Get human-readable state name
  */
-export function getStateDisplayName(status: OrderStatus): string {
-  const displayNames: Record<OrderStatus, string> = {
-    pending: "Pending Approval",
-    created: "Created",
-    sent_to_kitchen: "Sent to Kitchen",
+export function getStateDisplayName(status: string): string {
+  const displayNames: Record<string, string> = {
+    pending: "Pending",
     preparing: "Preparing",
     ready: "Ready",
     served: "Served",
     paid: "Paid",
     cancelled: "Cancelled",
+    created: "Pending",
+    sent_to_kitchen: "Preparing",
   };
   return displayNames[status] || status;
-}
-
-/**
- * Get state progression percentage (0-100)
- */
-export function getStateProgress(status: OrderStatus): number {
-  const progressMap: Record<OrderStatus, number> = {
-    pending: 5,
-    created: 10,
-    sent_to_kitchen: 25,
-    preparing: 40,
-    ready: 60,
-    served: 80,
-    paid: 100,
-    cancelled: 0,
-  };
-  return progressMap[status] || 0;
 }

@@ -80,11 +80,12 @@ export const createOrder = staffProcedure
       createdAt: now,
     });
 
-    logger.info("ORDER_CREATED", `Order ${id} created in state 'created'`, {
-      orderId: id,
-      cafeteriaId: input.cafeteriaId,
-      tableId: input.tableId,
-    });
+      console.log(`[ORDER_CREATED] Order ${id} created for cafeteria ${input.cafeteriaId}`);
+      logger.info("ORDER_CREATED", `Order ${id} created in state 'created'`, {
+        orderId: id,
+        cafeteriaId: input.cafeteriaId,
+        tableId: input.tableId,
+      });
 
     return {
       id,
@@ -283,6 +284,7 @@ export const markPreparing = staffProcedure
         await syncTableState(tx, order.tableId);
       }
 
+      console.log(`[ORDER_STATUS_UPDATE] Order ${input.orderId}: ${order.status} -> preparing`);
       logger.info("ORDER_PREPARING", `Order ${input.orderId} marked as preparing`, {
         orderId: input.orderId,
       });
@@ -349,6 +351,7 @@ export const markReady = staffProcedure
         await syncTableState(tx, order.tableId);
       }
 
+      console.log(`[ORDER_STATUS_UPDATE] Order ${input.orderId}: ${order.status} -> ready`);
       logger.info("ORDER_READY", `Order ${input.orderId} marked as ready`, {
         orderId: input.orderId,
       });

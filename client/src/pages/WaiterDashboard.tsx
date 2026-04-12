@@ -49,6 +49,7 @@ export default function WaiterDashboard() {
 
   const [activeFilter, setActiveFilter] = useState<OrderStatus>("all");
   const [now, setNow] = useState(new Date());
+  const [shiftWarning, setShiftWarning] = useState(false);
 
   // Tick every second for elapsed time
   useEffect(() => {
@@ -68,6 +69,14 @@ export default function WaiterDashboard() {
 
   const hasActiveShift = activeShiftData && activeShiftData.length > 0;
   const currentShift = hasActiveShift ? activeShiftData[0] : null;
+
+  useEffect(() => {
+    if (!shiftLoading && !hasActiveShift) {
+      setShiftWarning(true);
+    } else {
+      setShiftWarning(false);
+    }
+  }, [hasActiveShift, shiftLoading]);
 
   const startShiftMutation = trpc.shifts.startShift.useMutation({
     onSuccess: () => {
@@ -123,9 +132,14 @@ export default function WaiterDashboard() {
   const markServedMutation = trpc.ordersPhase2.markServed.useMutation({
     onSuccess: () => {
       toast.success("Order marked as served");
+      console.log('[WAITER_ACTION] Order marked as served');
       refetchOrders();
     },
-    onError: (err) => toast.error(`Error: ${err.message}`),
+    onError: (err) => {
+      const errorMsg = err.message || 'Failed to mark order as served';
+      toast.error(errorMsg);
+      console.error('[WAITER_ACTION_ERROR] Failed to mark served:', err);
+    },
   });
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -222,6 +236,16 @@ export default function WaiterDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* Shift Warning */}
+        {shiftWarning && (
+          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-300 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-red-800">No Active Shift</p>
+              <p className="text-xs text-red-600 mt-1">You must start a shift to perform actions</p>
+            </div>
+          </div>
+        )}
         {/* ── Summary Stats ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
@@ -389,15 +413,21 @@ function OrderCard({
         {/* Actions */}
         <div className="space-y-2">
           {canMarkServed && (
-            <Button
-              size="sm"
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
-              onClick={onMarkServed}
-              disabled={isMarkingServed}
-            >
-              <CheckCircle2 className="w-4 h-4 mr-1.5" />
-              Mark as Served
-            </Button>
+                <Button
+                  size="sm"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white disabled:bg-green-600/50"
+                  onClick={() => {
+                    if (!hasActiveShift) {
+                      toast.error('You must have an active shift to mark orders as served');
+                      return;
+                    }
+                    onMarkServed();
+                  }}
+                  disabled={isMarkingServed || !hasActiveShift}
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                  Mark as Served
+                </Button>
           )}
           {order.status === "pending" && (
             <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500 py-1">
