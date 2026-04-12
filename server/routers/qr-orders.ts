@@ -3,7 +3,7 @@ import { publicProcedure, router } from "../_core/trpc.js";
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db.js";
-import { cafeteriaTables, orders, orderItems, menuItems, menuCategories } from "../../drizzle/schema.js";
+import { cafeteriaTables, orders, orderItems, menuItems, menuCategories, cafeterias } from "../../drizzle/schema.js";
 import { and, inArray } from "drizzle-orm";
 import { logger } from "../utils/logger.js";
 
@@ -35,7 +35,6 @@ export const qrOrdersRouter = router({
       // Fetch cafeteria name
       let cafeteriaName: string | null = null;
       try {
-        const { cafeterias } = await import('../../drizzle/schema.js');
         const cafResult = await db.select({ name: cafeterias.name }).from(cafeterias).where(eq(cafeterias.id, tableData.cafeteriaId));
         cafeteriaName = cafResult[0]?.name ?? null;
       } catch (_) {}
@@ -117,6 +116,7 @@ export const qrOrdersRouter = router({
           z.object({
             menuItemId: z.string(),
             quantity: z.number().positive(),
+            notes: z.string().optional(),
           })
         ),
       })
@@ -138,16 +138,23 @@ export const qrOrdersRouter = router({
         }
 
         const table = tableResult[0];
+        const cafeteriaId = table.cafeteriaId;
+        
+        if (!cafeteriaId) {
+          throw new Error("Table is not linked to any cafeteria");
+        }
+
         const now = new Date();
         
         // Find existing open order for this table to maintain one session per table
+        // We use "created" or "pending" as active statuses
         const existingOpenOrders = await db
           .select()
           .from(orders)
           .where(
             and(
               eq(orders.tableId, table.id),
-              eq(orders.status, "created")
+              inArray(orders.status, ["created", "pending"])
             )
           )
           .limit(1);
@@ -166,14 +173,17 @@ export const qrOrdersRouter = router({
         let totalAmount = 0;
         const itemsWithPrices = [];
         for (const item of input.items) {
-          const menuItem = await db
+          const menuItemResult = await db
             .select()
             .from(menuItems)
             .where(eq(menuItems.id, item.menuItemId));
-          if (!menuItem || menuItem.length === 0) {
+          
+          if (!menuItemResult || menuItemResult.length === 0) {
             throw new Error(`Menu item ${item.menuItemId} not found`);
           }
-          const price = parseFloat(menuItem[0].price || "0");
+          
+          const menuItem = menuItemResult[0];
+          const price = parseFloat(menuItem.price || "0");
           const itemTotal = price * item.quantity;
           totalAmount += itemTotal;
           itemsWithPrices.push({
@@ -187,7 +197,7 @@ export const qrOrdersRouter = router({
           // Create new order session for the table
           await db.insert(orders).values({
             id: orderId,
-            cafeteriaId: table.cafeteriaId,
+            cafeteriaId: cafeteriaId,
             tableId: table.id,
             totalAmount: String(totalAmount),
             status: "pending",
@@ -202,10 +212,11 @@ export const qrOrdersRouter = router({
             .update(orders)
             .set({
               totalAmount: String(currentTotal + totalAmount),
-              status: "pending",
+              status: "pending", // Keep it pending/active
             })
             .where(eq(orders.id, orderId));
         }
+
         // Add order items
         for (const item of itemsWithPrices) {
           const orderItemId = nanoid();
@@ -217,6 +228,7 @@ export const qrOrdersRouter = router({
             unitPrice: String(item.price),
             totalPrice: String(item.itemTotal),
             status: "pending",
+            notes: item.notes || null,
             createdAt: now,
           });
         }
@@ -227,9 +239,7 @@ export const qrOrdersRouter = router({
           .set({ status: "occupied" })
           .where(eq(cafeteriaTables.id, table.id));
 
-        // TASK 2 — Logging: order created and table status changed
         logger.info("ORDER_CREATED", `Customer order ${orderId} created for Table ${table.tableNumber}`, { orderId, tableId: table.id });
-        logger.info("TABLE_STATUS_CHANGED", `Table ${table.tableNumber} status changed to occupied`, { tableId: table.id, status: "occupied" });
 
         return {
           orderId,
@@ -237,7 +247,7 @@ export const qrOrdersRouter = router({
           tableNumber: table.tableNumber,
           totalAmount,
           itemCount: input.items.length,
-          status: "created",
+          status: "pending",
           createdAt: now,
         };
       } catch (error: any) {
@@ -266,10 +276,20 @@ export const qrOrdersRouter = router({
 
       const order = orderResult[0];
 
-      // Get order items
+      // Get order items with names
       const items = await db
-        .select()
+        .select({
+          id: orderItems.id,
+          menuItemId: orderItems.menuItemId,
+          quantity: orderItems.quantity,
+          unitPrice: orderItems.unitPrice,
+          totalPrice: orderItems.totalPrice,
+          status: orderItems.status,
+          notes: orderItems.notes,
+          name: menuItems.name,
+        })
         .from(orderItems)
+        .leftJoin(menuItems, eq(orderItems.menuItemId, menuItems.id))
         .where(eq(orderItems.orderId, input.orderId));
 
       return {
@@ -281,10 +301,12 @@ export const qrOrdersRouter = router({
         items: items.map((item: any) => ({
           id: item.id,
           menuItemId: item.menuItemId,
+          name: item.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           totalPrice: item.totalPrice,
           status: item.status,
+          notes: item.notes,
         })),
         createdAt: order.createdAt,
       };
