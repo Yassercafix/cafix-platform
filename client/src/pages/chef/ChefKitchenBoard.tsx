@@ -56,7 +56,7 @@ export default function ChefKitchenBoard() {
         if (!grouped[item.orderId]) {
           grouped[item.orderId] = {
             id: item.orderId,
-            tableNumber: item.orderId.slice(0, 4), // Fallback if tableNumber not in item
+            tableNumber: item.tableNumber || item.orderId.slice(0, 4), // Use actual table number if available
             status: item.status as any,
             createdAt: item.sentToKitchenAt || new Date().toISOString(),
             items: []
@@ -64,7 +64,7 @@ export default function ChefKitchenBoard() {
         }
         grouped[item.orderId].items.push({
           id: item.id,
-          name: `Item ${item.menuItemId}`,
+          name: item.itemName || `Item ${item.menuItemId}`, // Use actual item name if available
           quantity: item.quantity,
           notes: item.notes
         });
@@ -157,7 +157,7 @@ export default function ChefKitchenBoard() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="w-6 h-6 bg-slate-700 rounded flex items-center justify-center text-xs font-bold text-orange-400">{item.quantity}x</span>
-                            <span className="font-bold text-slate-100 group-hover:text-orange-300 transition-colors">{item.name}</span>
+                            <span className="font-bold text-slate-100 group-hover:text-orange-300 transition-colors text-sm">{item.name}</span>
                           </div>
                           {item.notes && (
                             <div className="mt-1 ml-8 p-1.5 bg-red-900/20 border border-red-900/30 rounded text-[10px] text-red-400 flex items-center gap-1">
