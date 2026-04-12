@@ -172,12 +172,15 @@ export default function CafeteriaOrders() {
   };
 
   const getStatusConfig = (status: string) => {
-    const configs: Record<string, { label: string; labelAr: string; color: string; icon: React.ReactNode }> = {
+      const configs: Record<string, { label: string; labelAr: string; color: string; icon: React.ReactNode }> = {
+      pending: { label: 'Pending', labelAr: 'قيد الانتظار', color: 'bg-amber-100 text-amber-700', icon: <Clock className="w-3 h-3" /> },
+      created: { label: 'Created', labelAr: 'تم الإنشاء', color: 'bg-blue-100 text-blue-700', icon: <Clock className="w-3 h-3" /> },
       open: { label: 'Open', labelAr: 'مفتوح', color: 'bg-blue-100 text-blue-700', icon: <Clock className="w-3 h-3" /> },
       closed: { label: 'Closed', labelAr: 'مغلق', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="w-3 h-3" /> },
+      paid: { label: 'Paid', labelAr: 'مدفوع', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="w-3 h-3" /> },
       cancelled: { label: 'Cancelled', labelAr: 'ملغي', color: 'bg-red-100 text-red-700', icon: <XCircle className="w-3 h-3" /> },
     };
-    return configs[status] || configs.open;
+    return configs[status] || configs.pending;
   };
 
   const getItemStatusConfig = (status: string) => {
@@ -191,9 +194,9 @@ export default function CafeteriaOrders() {
     return configs[status] || configs.pending;
   };
 
-  const openOrders = orders.filter(o => o.status === 'open').length;
-  const closedOrders = orders.filter(o => o.status === 'closed').length;
-  const totalRevenue = orders.filter(o => o.status === 'closed').reduce((s, o) => s + o.totalAmount, 0);
+  const openOrders = orders.filter(o => ['open', 'created', 'pending'].includes(o.status)).length;
+  const closedOrders = orders.filter(o => ['closed', 'paid'].includes(o.status)).length;
+  const totalRevenue = orders.filter(o => ['closed', 'paid'].includes(o.status)).reduce((s, o) => s + o.totalAmount, 0);
 
   const filteredOrders = statusFilter === 'all' ? orders : orders.filter(o => o.status === statusFilter);
 
@@ -247,17 +250,20 @@ export default function CafeteriaOrders() {
 
           {/* Filters & Actions */}
           <div className="flex items-center justify-between gap-3 mb-4">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{isRTL ? 'جميع الطلبات' : 'All Orders'}</SelectItem>
-                <SelectItem value="open">{isRTL ? 'مفتوحة' : 'Open'}</SelectItem>
-                <SelectItem value="closed">{isRTL ? 'مغلقة' : 'Closed'}</SelectItem>
-                <SelectItem value="cancelled">{isRTL ? 'ملغاة' : 'Cancelled'}</SelectItem>
-              </SelectContent>
-            </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder={isRTL ? 'الحالة' : 'Status'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{isRTL ? 'الكل' : 'All'}</SelectItem>
+                    <SelectItem value="pending">{isRTL ? 'قيد الانتظار' : 'Pending'}</SelectItem>
+                    <SelectItem value="created">{isRTL ? 'تم الإنشاء' : 'Created'}</SelectItem>
+                    <SelectItem value="open">{isRTL ? 'مفتوح' : 'Open'}</SelectItem>
+                    <SelectItem value="closed">{isRTL ? 'مغلق' : 'Closed'}</SelectItem>
+                    <SelectItem value="paid">{isRTL ? 'مدفوع' : 'Paid'}</SelectItem>
+                    <SelectItem value="cancelled">{isRTL ? 'ملغي' : 'Cancelled'}</SelectItem>
+                  </SelectContent>
+                </Select>
             <Button variant="outline" size="sm" onClick={fetchOrders} className="gap-2">
               <RefreshCw className="w-4 h-4" />
               {isRTL ? 'تحديث' : 'Refresh'}

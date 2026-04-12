@@ -135,7 +135,7 @@ export const qrOrdersRouter = router({
             cafeteriaId: table.cafeteriaId,
             tableId: table.id,
             totalAmount: String(totalAmount),
-            status: "created",
+            status: "pending",
             source: "customer",
             pointsConsumed: "0",
             createdAt: now,
@@ -147,6 +147,7 @@ export const qrOrdersRouter = router({
             .update(orders)
             .set({
               totalAmount: String(currentTotal + totalAmount),
+              status: "pending",
             })
             .where(eq(orders.id, orderId));
         }
@@ -160,7 +161,7 @@ export const qrOrdersRouter = router({
             quantity: item.quantity,
             unitPrice: String(item.price),
             totalPrice: String(item.itemTotal),
-            status: "created",
+            status: "pending",
             createdAt: now,
           });
         }

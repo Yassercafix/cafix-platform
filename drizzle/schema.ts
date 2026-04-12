@@ -43,8 +43,9 @@ export const ledgerTypeEnum = pgEnum("ledger_type", [
 ]);
 export const periodTypeEnum = pgEnum("period_type", ["global_first_time", "special_grant"]);
 export const tableStatusEnum = pgEnum("table_status", ["available", "occupied", "in_progress", "ready", "served"]);
-export const orderStatusEnum = pgEnum("order_status", ["created", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"]);
+export const orderStatusEnum = pgEnum("order_status", ["pending", "created", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"]);
 export const orderItemStatusEnum = pgEnum("order_item_status", [
+  "pending",
   "created",
   "sent_to_kitchen",
   "preparing",
@@ -659,8 +660,8 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
 
-export type OrderStatus = "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid" | "cancelled";
-export type OrderItemStatus = "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid" | "cancelled";
+export type OrderStatus = "pending" | "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid" | "cancelled";
+export type OrderItemStatus = "pending" | "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid" | "cancelled";
 export type TableStatus = "available" | "occupied" | "in_progress" | "ready" | "served";
 
 // ============================================================================

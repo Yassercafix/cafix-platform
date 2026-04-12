@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 interface OrderStatus {
-  stage: "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid";
+  stage: "pending" | "created" | "sent_to_kitchen" | "preparing" | "ready" | "served" | "paid";
   label: string;
   timestamp?: Date;
   duration?: string;
@@ -50,8 +50,8 @@ export default function OrderTracking() {
 
     const statuses: OrderStatus[] = [
       {
-        stage: "created",
-        label: "Order Created",
+        stage: "pending",
+        label: "Order Received",
         timestamp: new Date(order.createdAt),
         completed: true,
       },
@@ -59,6 +59,14 @@ export default function OrderTracking() {
 
     const currentStatus = order.status;
     const items = order.items;
+
+    // Created
+    const isCreated = ["created", "sent_to_kitchen", "preparing", "ready", "served", "paid"].includes(currentStatus);
+    statuses.push({
+      stage: "created",
+      label: "Order Confirmed",
+      completed: isCreated,
+    });
 
     // Sent to Kitchen
     const isSent = ["sent_to_kitchen", "preparing", "ready", "served", "paid"].includes(currentStatus);

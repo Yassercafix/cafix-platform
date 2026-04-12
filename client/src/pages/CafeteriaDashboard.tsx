@@ -61,6 +61,11 @@ export default function CafeteriaDashboard() {
         const status = String(order.status || '').toLowerCase();
         return !['paid', 'cancelled', 'completed'].includes(status);
       }).length;
+
+      const pendingOrders = orders.filter((order: any) => {
+        const status = String(order.status || '').toLowerCase();
+        return status === 'pending';
+      });
       
       const totalRevenue = orders
         .filter((order: any) => String(order.status || '').toLowerCase() === 'paid')
@@ -72,6 +77,7 @@ export default function CafeteriaDashboard() {
         staffCount: (staffRes.data || []).length,
       });
 
+      setPendingOrders(pendingOrders);
       setRecentOrders(orders.slice(0, 5));
     } catch (err) {
       console.error('Dashboard error:', err);
@@ -101,6 +107,8 @@ export default function CafeteriaDashboard() {
       occupiedTables: Math.max(tables.length - availableTables, 0),
     };
   }, [menuSummary, tables]);
+
+  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
 
   const quickActions = [
     {
@@ -324,6 +332,45 @@ export default function CafeteriaDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {pendingOrders.length > 0 && (
+          <Card className="border-0 shadow-md mb-6 bg-amber-50 border-l-4 border-amber-500">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-bold text-amber-800 flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5" />
+                {isRTL ? 'طلبات جديدة (قيد الانتظار)' : 'New Pending Orders'}
+                <Badge className="bg-amber-500 text-white border-none">{pendingOrders.length}</Badge>
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setLocation('/dashboard/cafeteria-admin/orders')}
+                className="text-amber-700 hover:text-amber-900 gap-1 text-xs"
+              >
+                {isRTL ? 'عرض الكل' : 'View All'}
+                <ChevronRight className={`w-3 h-3 ${isRTL ? 'rotate-180' : ''}`} />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {pendingOrders.map((order: any) => (
+                  <div key={order.id} className="flex items-center justify-between rounded-xl border border-amber-200 bg-white p-3 shadow-sm">
+                    <div>
+                      <p className="font-bold text-slate-900">Order #{order.id?.slice?.(0, 8)}</p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(order.createdAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black text-amber-600">${Number(order.totalAmount || 0).toFixed(2)}</p>
+                      <Badge variant="outline" className="text-[10px] h-5 border-amber-200 text-amber-700">PENDING</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-0 shadow-md mb-6">
           <CardHeader className="pb-3 flex flex-row items-center justify-between">
