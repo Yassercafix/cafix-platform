@@ -60,6 +60,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/login"} component={Login} />
       <Route path={"/menu/:tableToken"} component={CustomerMenu} />
+      <Route path={"/order/:tableToken"} component={CustomerMenu} />
       <Route path={"/order-tracking/:orderId"} component={OrderTracking} />
       <Route path={"/order-confirmation/:orderId"} component={OrderTracking} />
       
