@@ -172,9 +172,8 @@ export default function WaiterDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ── Header ── */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
+      <header className="bg-gradient-to-r from-white to-orange-50 border-b-2 border-orange-200 shadow-md sticky top-0 z-40">0 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
             <UtensilsCrossed className="w-6 h-6 text-orange-500" />
@@ -235,7 +234,7 @@ export default function WaiterDashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         {/* Shift Warning */}
         {shiftWarning && (
           <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-300 flex items-center gap-3">
