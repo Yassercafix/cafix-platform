@@ -167,8 +167,9 @@ export default function OrderTracking() {
             {order.items.map((item: any) => (
               <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <div>
-                  <p className="font-medium">Item {item.menuItemId}</p>
+                  <p className="font-medium">{item.name || `Item ${item.menuItemId}`}</p>
                   <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                  {item.notes && <p className="text-xs text-orange-600 mt-1 italic">Note: {item.notes}</p>}
                 </div>
                 <Badge variant="outline" className="capitalize">
                   {item.status?.replace(/_/g, " ") || "Pending"}
