@@ -326,10 +326,18 @@ export default function CustomerMenu() {
           return (
             <div key={item.id} className="flex flex-col">
               <div className="relative aspect-square bg-gray-50 rounded-3xl overflow-hidden mb-3 group">
-                {/* Placeholder Image or Item Image */}
-                <div className="w-full h-full flex items-center justify-center text-gray-300">
-                  <UtensilsCrossed className="w-12 h-12" />
-                </div>
+                {/* Item Image or Placeholder */}
+                {item.imageUrl ? (
+                  <img 
+                    src={item.imageUrl} 
+                    alt={item.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-300">
+                    <UtensilsCrossed className="w-12 h-12" />
+                  </div>
+                )}
                 
                 {/* Favorite Toggle */}
                 <button className="absolute top-3 right-3 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm">
@@ -365,9 +373,15 @@ export default function CustomerMenu() {
                 </div>
               </div>
 
-              <h3 className="font-bold text-gray-900 text-sm mb-1 line-clamp-2 leading-snug px-1">
+              <h3 className="font-bold text-gray-900 text-sm mb-0.5 line-clamp-2 leading-snug px-1">
                 {item.name}
               </h3>
+              
+              {item.description && (
+                <p className="text-[10px] text-gray-500 line-clamp-1 mb-1 px-1">
+                  {item.description}
+                </p>
+              )}
               
               <div className="flex items-center justify-between px-1">
                 <div className="flex flex-col">

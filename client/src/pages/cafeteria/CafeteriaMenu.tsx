@@ -12,11 +12,10 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   UtensilsCrossed, LayoutDashboard, Table2, Users, BarChart3, CreditCard, Settings,
-  Plus, Edit, Trash2, Tag, DollarSign, Eye, EyeOff, AlertCircle
+  Plus, Edit, Trash2, Tag, DollarSign, Eye, EyeOff, AlertCircle, Image as ImageIcon, X
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
@@ -33,6 +32,7 @@ interface MenuItem {
   name: string;
   description?: string;
   price: number;
+  imageUrl?: string;
   categoryId: string;
   categoryName?: string;
   isAvailable: boolean;
@@ -59,12 +59,17 @@ export default function CafeteriaMenu() {
   const [submitting, setSubmitting] = useState(false);
 
   const [categoryForm, setCategoryForm] = useState({ name: '' });
-  const [itemForm, setItemForm] = useState({ name: '', description: '', price: '', categoryId: '', isAvailable: true });
+  const [itemForm, setItemForm] = useState({ 
+    name: '', 
+    description: '', 
+    price: '', 
+    categoryId: '', 
+    imageUrl: '',
+    isAvailable: true 
+  });
 
-  // Use cafeteriaId from user metadata
   const cafeteriaId = user?.cafeteriaId;
 
-  // tRPC Queries
   const categoriesQuery = trpc.menu.getCategories.useQuery(
     { cafeteriaId: cafeteriaId || '' },
     { enabled: !!cafeteriaId }
@@ -75,7 +80,6 @@ export default function CafeteriaMenu() {
     { enabled: !!cafeteriaId }
   );
 
-  // tRPC Mutations
   const utils = trpc.useContext();
   const createCategoryMutation = trpc.menu.createCategory.useMutation({
     onSuccess: () => {
@@ -116,7 +120,7 @@ export default function CafeteriaMenu() {
       utils.menu.getMenuItems.invalidate();
       toast.success(isRTL ? 'تم إضافة الصنف بنجاح' : 'Item added successfully');
       setShowAddItemDialog(false);
-      setItemForm({ name: '', description: '', price: '', categoryId: '', isAvailable: true });
+      setItemForm({ name: '', description: '', price: '', categoryId: '', imageUrl: '', isAvailable: true });
     },
     onError: (err) => {
       toast.error(err.message || (isRTL ? 'خطأ في إضافة الصنف' : 'Error adding item'));
@@ -145,20 +149,21 @@ export default function CafeteriaMenu() {
     }
   });
 
-  const categories = (categoriesQuery.data || []).map(c => ({
+  const categories = (categoriesQuery.data || []).map((c: any) => ({
     id: c.id,
     name: c.name,
     displayOrder: c.displayOrder,
     cafeteriaId: c.cafeteriaId
   }));
 
-  const menuItems = (itemsQuery.data || []).map(i => ({
+  const menuItems = (itemsQuery.data || []).map((i: any) => ({
     id: i.id,
     name: i.name,
     description: i.description,
     price: i.price,
+    imageUrl: i.imageUrl,
     categoryId: i.categoryId,
-    categoryName: categories.find(c => c.id === i.categoryId)?.name,
+    categoryName: categories.find((c: any) => c.id === i.categoryId)?.name,
     isAvailable: i.available,
     cafeteriaId: cafeteriaId || ''
   }));
@@ -220,6 +225,7 @@ export default function CafeteriaMenu() {
       name: itemForm.name.trim(),
       description: itemForm.description || undefined,
       price: parseFloat(itemForm.price),
+      imageUrl: itemForm.imageUrl || undefined,
     });
   };
 
@@ -231,6 +237,7 @@ export default function CafeteriaMenu() {
       description: itemForm.description || undefined,
       price: parseFloat(itemForm.price),
       categoryId: itemForm.categoryId,
+      imageUrl: itemForm.imageUrl || undefined,
       available: itemForm.isAvailable,
     });
   };
@@ -244,7 +251,7 @@ export default function CafeteriaMenu() {
 
   const filteredItems = activeCategory === 'all' 
     ? menuItems 
-    : menuItems.filter(i => i.categoryId === activeCategory);
+    : menuItems.filter((i: any) => i.categoryId === activeCategory);
 
   if (authLoading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
 
@@ -253,7 +260,7 @@ export default function CafeteriaMenu() {
       <DashboardHeader showBackButton={true} showHomeButton={true} title={isRTL ? 'إدارة المنيو' : 'Menu Management'} onMenuClick={() => setMenuOpen(true)} />
       <DashboardNavigation isOpen={menuOpen} onClose={() => setMenuOpen(false)} items={navigationItems} />
 
-      <main className="container mx-auto px-4 py-6 max-w-6xl">
+      <main className="container mx-auto px-4 py-6 max-w-7xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-black text-slate-900">{isRTL ? 'قائمة الطعام' : 'Menu Items'}</h1>
@@ -272,97 +279,120 @@ export default function CafeteriaMenu() {
         </div>
 
         <Tabs defaultValue="all" value={activeCategory} onValueChange={setActiveCategory} className="w-full">
-          <div className="flex items-center justify-between mb-4 overflow-x-auto pb-2">
+          <div className="flex items-center justify-between mb-6 overflow-x-auto pb-2">
             <TabsList className="bg-white border">
               <TabsTrigger value="all">{isRTL ? 'الكل' : 'All'}</TabsTrigger>
-              {categories.map(cat => (
+              {categories.map((cat: any) => (
                 <TabsTrigger key={cat.id} value={cat.id} className="gap-2">
                   {cat.name}
-                  <div className="flex gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Edit className="w-3 h-3 cursor-pointer" onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedCategory(cat);
-                      setCategoryForm({ name: cat.name });
-                      setShowEditCategoryDialog(true);
-                    }} />
-                  </div>
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
 
           <TabsContent value={activeCategory} className="mt-0">
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'الصنف' : 'Item'}</TableHead>
-                      <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'الفئة' : 'Category'}</TableHead>
-                      <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'السعر' : 'Price'}</TableHead>
-                      <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'الحالة' : 'Status'}</TableHead>
-                      <TableHead className={isRTL ? 'text-left' : 'text-right'}>{isRTL ? 'إجراءات' : 'Actions'}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8">{isRTL ? 'جاري التحميل...' : 'Loading...'}</TableCell></TableRow>
-                    ) : filteredItems.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-slate-500">{isRTL ? 'لا توجد أصناف' : 'No items found'}</TableCell></TableRow>
-                    ) : (
-                      filteredItems.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>
-                            <div className="font-medium">{item.name}</div>
-                            {item.description && <div className="text-xs text-slate-500 truncate max-w-[200px]">{item.description}</div>}
-                          </TableCell>
-                          <TableCell>
-                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-xs font-medium text-slate-600">
-                              {item.categoryName || (isRTL ? 'بدون فئة' : 'No category')}
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-slate-500">{isRTL ? 'جاري التحميل...' : 'Loading...'}</p>
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <Card className="text-center py-12">
+                <UtensilsCrossed className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500">{isRTL ? 'لا توجد أصناف' : 'No items found'}</p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredItems.map((item: any) => (
+                  <Card key={item.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    {/* Item Image */}
+                    <div className="relative aspect-video bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                      {item.imageUrl ? (
+                        <img 
+                          src={item.imageUrl} 
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ImageIcon className="w-8 h-8 text-slate-400" />
+                        </div>
+                      )}
+                      {!item.isAvailable && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">{isRTL ? 'غير متاح' : 'Unavailable'}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Item Details */}
+                    <CardContent className="p-4">
+                      <div className="mb-3">
+                        <h3 className="font-bold text-slate-900 text-base line-clamp-2">{item.name}</h3>
+                        {item.description && (
+                          <p className="text-xs text-slate-500 line-clamp-2 mt-1">{item.description}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex flex-col">
+                          <span className="text-2xl font-black text-blue-600">{item.price.toFixed(2)}</span>
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-xs font-medium text-slate-600 mt-1 w-fit">
+                            {item.categoryName || (isRTL ? 'بدون فئة' : 'No category')}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          {item.isAvailable ? (
+                            <span className="inline-flex items-center gap-1 text-green-600 text-xs font-bold">
+                              <Eye className="w-3 h-3" /> {isRTL ? 'متاح' : 'Available'}
                             </span>
-                          </TableCell>
-                          <TableCell className="font-bold text-blue-600">{item.price}</TableCell>
-                          <TableCell>
-                            {item.isAvailable ? (
-                              <span className="inline-flex items-center gap-1 text-green-600 text-xs font-bold">
-                                <Eye className="w-3 h-3" /> {isRTL ? 'متاح' : 'Available'}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-slate-400 text-xs font-bold">
-                                <EyeOff className="w-3 h-3" /> {isRTL ? 'غير متاح' : 'Unavailable'}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className={isRTL ? 'text-left' : 'text-right'}>
-                            <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon" onClick={() => {
-                                setSelectedItem(item);
-                                setItemForm({
-                                  name: item.name,
-                                  description: item.description || '',
-                                  price: item.price.toString(),
-                                  categoryId: item.categoryId,
-                                  isAvailable: item.isAvailable
-                                });
-                                setShowEditItemDialog(true);
-                              }}>
-                                <Edit className="w-4 h-4 text-slate-500" />
-                              </Button>
-                              <Button variant="ghost" size="icon" onClick={() => {
-                                setSelectedItem(item);
-                                setShowDeleteItemDialog(true);
-                              }}>
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-slate-400 text-xs font-bold">
+                              <EyeOff className="w-3 h-3" /> {isRTL ? 'غير متاح' : 'Unavailable'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => {
+                            setSelectedItem(item);
+                            setItemForm({
+                              name: item.name,
+                              description: item.description || '',
+                              price: item.price.toString(),
+                              categoryId: item.categoryId,
+                              imageUrl: item.imageUrl || '',
+                              isAvailable: item.isAvailable
+                            });
+                            setShowEditItemDialog(true);
+                          }}
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          {isRTL ? 'تعديل' : 'Edit'}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => {
+                            setSelectedItem(item);
+                            setShowDeleteItemDialog(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>
@@ -377,8 +407,8 @@ export default function CafeteriaMenu() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowAddCategoryDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-            <Button onClick={handleAddCategory} disabled={createCategoryMutation.isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {createCategoryMutation.isLoading ? '...' : (isRTL ? 'إضافة' : 'Add')}
+            <Button onClick={handleAddCategory} disabled={createCategoryMutation.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {createCategoryMutation.isPending ? '...' : (isRTL ? 'إضافة' : 'Add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -398,125 +428,230 @@ export default function CafeteriaMenu() {
             </Button>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowEditCategoryDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-              <Button onClick={handleEditCategory} disabled={updateCategoryMutation.isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-                {updateCategoryMutation.isLoading ? '...' : (isRTL ? 'حفظ' : 'Save')}
+              <Button onClick={handleEditCategory} disabled={updateCategoryMutation.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+                {updateCategoryMutation.isPending ? '...' : (isRTL ? 'حفظ' : 'Save')}
               </Button>
             </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add Item Dialog */}
+      {/* Add Item Dialog with Live Preview */}
       <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
-        <DialogContent className="max-w-md" dir={isRTL ? 'rtl' : 'ltr'}>
+        <DialogContent className="max-w-2xl" dir={isRTL ? 'rtl' : 'ltr'}>
           <DialogHeader><DialogTitle>{isRTL ? 'إضافة صنف جديد' : 'Add New Item'}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label>{isRTL ? 'اسم الصنف *' : 'Item Name *'}</Label>
-              <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e?.target?.value || '' })} className="mt-1" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+            {/* Form */}
+            <div className="space-y-4">
+              <div>
+                <Label>{isRTL ? 'اسم الصنف *' : 'Item Name *'}</Label>
+                <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e?.target?.value || '' })} className="mt-1" />
+              </div>
+              <div>
+                <Label>{isRTL ? 'الفئة *' : 'Category *'}</Label>
+                <Select value={itemForm.categoryId} onValueChange={v => setItemForm({ ...itemForm, categoryId: v })}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={isRTL ? 'اختر فئة' : 'Select category'} /></SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {categories.length === 0 && (
+                  <p className="text-[10px] text-red-500 mt-1">{isRTL ? 'يجب إضافة فئة أولاً' : 'Add a category first'}</p>
+                )}
+              </div>
+              <div>
+                <Label>{isRTL ? 'السعر *' : 'Price *'}</Label>
+                <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e?.target?.value || '' })} className="mt-1" />
+              </div>
+              <div>
+                <Label>{isRTL ? 'الوصف' : 'Description'}</Label>
+                <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e?.target?.value || '' })} className="mt-1" rows={2} />
+              </div>
+              <div>
+                <Label>{isRTL ? 'رابط الصورة' : 'Image URL'}</Label>
+                <Input value={itemForm.imageUrl} onChange={e => setItemForm({ ...itemForm, imageUrl: e?.target?.value || '' })} className="mt-1" placeholder="https://example.com/image.jpg" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={itemForm.isAvailable} onCheckedChange={v => setItemForm({ ...itemForm, isAvailable: v })} />
+                <Label>{isRTL ? 'متاح للطلب' : 'Available for order'}</Label>
+              </div>
             </div>
-            <div>
-              <Label>{isRTL ? 'الفئة *' : 'Category *'}</Label>
-              <Select value={itemForm.categoryId} onValueChange={v => setItemForm({ ...itemForm, categoryId: v })}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder={isRTL ? 'اختر فئة' : 'Select category'} /></SelectTrigger>
-                <SelectContent>
-                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {categories.length === 0 && (
-                <p className="text-[10px] text-red-500 mt-1">{isRTL ? 'يجب إضافة فئة أولاً' : 'Add a category first'}</p>
-              )}
-            </div>
-            <div>
-              <Label>{isRTL ? 'السعر *' : 'Price *'}</Label>
-              <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e?.target?.value || '' })} className="mt-1" />
-            </div>
-            <div>
-              <Label>{isRTL ? 'الوصف' : 'Description'}</Label>
-              <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e?.target?.value || '' })} className="mt-1" rows={2} />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={itemForm.isAvailable} onCheckedChange={v => setItemForm({ ...itemForm, isAvailable: v })} />
-              <Label>{isRTL ? 'متاح للطلب' : 'Available for order'}</Label>
+
+            {/* Live Preview */}
+            <div className="border rounded-lg p-4 bg-slate-50">
+              <p className="text-xs font-bold text-slate-500 mb-3 uppercase">{isRTL ? 'معاينة مباشرة' : 'Live Preview'}</p>
+              <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+                {/* Preview Image */}
+                <div className="relative aspect-square bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                  {itemForm.imageUrl ? (
+                    <img 
+                      src={itemForm.imageUrl} 
+                      alt="preview"
+                      className="w-full h-full object-cover"
+                      onError={() => {}}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-12 h-12 text-slate-300" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Preview Details */}
+                <div className="p-3">
+                  <h4 className="font-bold text-slate-900 text-sm line-clamp-2 mb-1">
+                    {itemForm.name || (isRTL ? 'اسم الصنف' : 'Item Name')}
+                  </h4>
+                  {itemForm.description && (
+                    <p className="text-xs text-slate-500 line-clamp-2 mb-2">{itemForm.description}</p>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-black text-blue-600">
+                      {itemForm.price ? `${parseFloat(itemForm.price).toFixed(2)} ج.م` : '0.00 ج.م'}
+                    </span>
+                    <div className="w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center">
+                      <Plus className="w-5 h-5 text-orange-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowAddItemDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-            <Button onClick={handleAddItem} disabled={createItemMutation.isLoading || categories.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {createItemMutation.isLoading ? '...' : (isRTL ? 'إضافة' : 'Add')}
+            <Button onClick={handleAddItem} disabled={createItemMutation.isPending || categories.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {createItemMutation.isPending ? '...' : (isRTL ? 'إضافة' : 'Add')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Item Dialog */}
+      {/* Edit Item Dialog with Live Preview */}
       <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
-        <DialogContent className="max-w-md" dir={isRTL ? 'rtl' : 'ltr'}>
+        <DialogContent className="max-w-2xl" dir={isRTL ? 'rtl' : 'ltr'}>
           <DialogHeader><DialogTitle>{isRTL ? 'تعديل الصنف' : 'Edit Item'}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label>{isRTL ? 'اسم الصنف *' : 'Item Name *'}</Label>
-              <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e?.target?.value || '' })} className="mt-1" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+            {/* Form */}
+            <div className="space-y-4">
+              <div>
+                <Label>{isRTL ? 'اسم الصنف *' : 'Item Name *'}</Label>
+                <Input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e?.target?.value || '' })} className="mt-1" />
+              </div>
+              <div>
+                <Label>{isRTL ? 'الفئة *' : 'Category *'}</Label>
+                <Select value={itemForm.categoryId} onValueChange={v => setItemForm({ ...itemForm, categoryId: v })}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={isRTL ? 'اختر فئة' : 'Select category'} /></SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{isRTL ? 'السعر *' : 'Price *'}</Label>
+                <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e?.target?.value || '' })} className="mt-1" />
+              </div>
+              <div>
+                <Label>{isRTL ? 'الوصف' : 'Description'}</Label>
+                <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e?.target?.value || '' })} className="mt-1" rows={2} />
+              </div>
+              <div>
+                <Label>{isRTL ? 'رابط الصورة' : 'Image URL'}</Label>
+                <Input value={itemForm.imageUrl} onChange={e => setItemForm({ ...itemForm, imageUrl: e?.target?.value || '' })} className="mt-1" placeholder="https://example.com/image.jpg" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={itemForm.isAvailable} onCheckedChange={v => setItemForm({ ...itemForm, isAvailable: v })} />
+                <Label>{isRTL ? 'متاح للطلب' : 'Available for order'}</Label>
+              </div>
             </div>
-            <div>
-              <Label>{isRTL ? 'الفئة *' : 'Category *'}</Label>
-              <Select value={itemForm.categoryId} onValueChange={v => setItemForm({ ...itemForm, categoryId: v })}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>{isRTL ? 'السعر *' : 'Price *'}</Label>
-              <Input type="number" step="0.01" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e?.target?.value || '' })} className="mt-1" />
-            </div>
-            <div>
-              <Label>{isRTL ? 'الوصف' : 'Description'}</Label>
-              <Textarea value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e?.target?.value || '' })} className="mt-1" rows={2} />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={itemForm.isAvailable} onCheckedChange={v => setItemForm({ ...itemForm, isAvailable: v })} />
-              <Label>{isRTL ? 'متاح للطلب' : 'Available for order'}</Label>
+
+            {/* Live Preview */}
+            <div className="border rounded-lg p-4 bg-slate-50">
+              <p className="text-xs font-bold text-slate-500 mb-3 uppercase">{isRTL ? 'معاينة مباشرة' : 'Live Preview'}</p>
+              <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+                {/* Preview Image */}
+                <div className="relative aspect-square bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                  {itemForm.imageUrl ? (
+                    <img 
+                      src={itemForm.imageUrl} 
+                      alt="preview"
+                      className="w-full h-full object-cover"
+                      onError={() => {}}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-12 h-12 text-slate-300" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Preview Details */}
+                <div className="p-3">
+                  <h4 className="font-bold text-slate-900 text-sm line-clamp-2 mb-1">
+                    {itemForm.name || (isRTL ? 'اسم الصنف' : 'Item Name')}
+                  </h4>
+                  {itemForm.description && (
+                    <p className="text-xs text-slate-500 line-clamp-2 mb-2">{itemForm.description}</p>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-black text-blue-600">
+                      {itemForm.price ? `${parseFloat(itemForm.price).toFixed(2)} ج.م` : '0.00 ج.م'}
+                    </span>
+                    <div className="w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center">
+                      <Plus className="w-5 h-5 text-orange-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowEditItemDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
-            <Button onClick={handleEditItem} disabled={updateItemMutation.isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {updateItemMutation.isLoading ? '...' : (isRTL ? 'حفظ' : 'Save')}
+            <Button variant="outline" onClick={() => setShowDeleteItemDialog(true)} className="text-red-600 border-red-200 hover:bg-red-50">
+              {isRTL ? 'حذف' : 'Delete'}
             </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowEditItemDialog(false)}>{isRTL ? 'إلغاء' : 'Cancel'}</Button>
+              <Button onClick={handleEditItem} disabled={updateItemMutation.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+                {updateItemMutation.isPending ? '...' : (isRTL ? 'حفظ' : 'Save')}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Category */}
-      <AlertDialog open={showDeleteCategoryDialog} onOpenChange={setShowDeleteCategoryDialog}>
-        <AlertDialogContent dir={isRTL ? 'rtl' : 'ltr'}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{isRTL ? 'حذف الفئة' : 'Delete Category'}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {isRTL ? `سيتم حذف الفئة "${selectedCategory?.name}" وجميع أصنافها.` : `Delete category "${selectedCategory?.name}" and all its items?`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{isRTL ? 'إلغاء' : 'Cancel'}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteCategory} className="bg-red-600 hover:bg-red-700">{isRTL ? 'حذف' : 'Delete'}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Delete Item */}
+      {/* Delete Item Alert */}
       <AlertDialog open={showDeleteItemDialog} onOpenChange={setShowDeleteItemDialog}>
         <AlertDialogContent dir={isRTL ? 'rtl' : 'ltr'}>
           <AlertDialogHeader>
             <AlertDialogTitle>{isRTL ? 'حذف الصنف' : 'Delete Item'}</AlertDialogTitle>
             <AlertDialogDescription>
-              {isRTL ? `هل تريد حذف "${selectedItem?.name}"؟` : `Delete "${selectedItem?.name}"?`}
+              {isRTL ? 'هل أنت متأكد من حذف هذا الصنف؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this item? This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{isRTL ? 'إلغاء' : 'Cancel'}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteItem} className="bg-red-600 hover:bg-red-700">{isRTL ? 'حذف' : 'Delete'}</AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteItem} className="bg-red-600 hover:bg-red-700">
+              {isRTL ? 'حذف' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Category Alert */}
+      <AlertDialog open={showDeleteCategoryDialog} onOpenChange={setShowDeleteCategoryDialog}>
+        <AlertDialogContent dir={isRTL ? 'rtl' : 'ltr'}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{isRTL ? 'حذف الفئة' : 'Delete Category'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isRTL ? 'هل أنت متأكد من حذف هذه الفئة؟ سيتم حذف جميع الأصناف المرتبطة بها.' : 'Are you sure you want to delete this category? All items in this category will be deleted.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{isRTL ? 'إلغاء' : 'Cancel'}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteCategory} className="bg-red-600 hover:bg-red-700">
+              {isRTL ? 'حذف' : 'Delete'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

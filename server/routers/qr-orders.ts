@@ -99,6 +99,7 @@ export const qrOrdersRouter = router({
         name: item.name,
         description: item.description,
         price: Number(item.price) || 0,
+        imageUrl: item.imageUrl,
         available: item.available,
         createdAt: item.createdAt,
       }));

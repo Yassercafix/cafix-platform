@@ -86,6 +86,7 @@ export const menuRouter = router({
         name: z.string(),
         description: z.string().optional(),
         price: z.number().positive(),
+        imageUrl: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -106,6 +107,7 @@ export const menuRouter = router({
         name: input.name,
         description: input.description,
         price: String(input.price),
+        imageUrl: input.imageUrl,
         available: true,
         createdAt: now,
       });
@@ -116,6 +118,7 @@ export const menuRouter = router({
         name: input.name,
         description: input.description,
         price: input.price,
+        imageUrl: input.imageUrl,
         available: true,
         createdAt: now,
       };
@@ -161,6 +164,7 @@ export const menuRouter = router({
         name: item.name,
         description: item.description,
         price: Number(item.price) || 0,
+        imageUrl: item.imageUrl,
         available: item.available,
         createdAt: item.createdAt,
       }));
@@ -242,6 +246,7 @@ export const menuRouter = router({
           name: item.name,
           description: item.description,
           price: Number(item.price) || 0,
+          imageUrl: item.imageUrl,
           available: item.available,
         })),
       };
@@ -257,6 +262,7 @@ export const menuRouter = router({
         name: z.string().optional(),
         description: z.string().optional(),
         price: z.number().positive().optional(),
+        imageUrl: z.string().optional(),
         available: z.boolean().optional(),
         categoryId: z.string().optional(),
       })
@@ -269,6 +275,7 @@ export const menuRouter = router({
       if (input.name !== undefined) updateData.name = input.name;
       if (input.description !== undefined) updateData.description = input.description;
       if (input.price !== undefined) updateData.price = String(input.price);
+      if (input.imageUrl !== undefined) updateData.imageUrl = input.imageUrl;
       if (input.available !== undefined) updateData.available = input.available;
       if (input.categoryId !== undefined) updateData.categoryId = input.categoryId;
 

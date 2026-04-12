@@ -603,6 +603,7 @@ export const menuItems = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     price: decimal("price", { precision: 10, scale: 2 }),
+    imageUrl: text("imageUrl"),
     available: boolean("available").default(true),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   }
