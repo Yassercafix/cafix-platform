@@ -13,7 +13,10 @@ import {
   MessageSquare,
   Check,
   AlertCircle,
-  UtensilsCrossed
+  UtensilsCrossed,
+  Search,
+  Heart,
+  ArrowLeft
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -27,18 +30,14 @@ interface CartItem {
 }
 
 export default function CustomerMenu() {
-  // Support both /order/:tableToken and /menu/:tableToken routes
   const params = useParams<{ tableToken?: string }>();
   const tableToken = params.tableToken;
   const [, navigate] = useLocation();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // DEBUG: log token on every render
-  console.log("TOKEN:", tableToken);
-
-  // ── Step 1: Resolve table by token (public endpoint) ──────────────────────
   const {
     data: table,
     isLoading: isLoadingTable,
@@ -48,7 +47,6 @@ export default function CustomerMenu() {
     { enabled: !!tableToken, retry: 1 }
   );
 
-  // ── Step 2: Fetch menu using public endpoint (token → cafeteria → items) ──
   const {
     data: menuData,
     isLoading: isLoadingMenu,
@@ -58,10 +56,6 @@ export default function CustomerMenu() {
     { enabled: !!tableToken, retry: 1 }
   );
 
-  // DEBUG: log menu data whenever it changes
-  console.log("MENU DATA:", menuData);
-
-  // ── Service requests ───────────────────────────────────────────────────────
   const { data: pendingRequests, refetch: refetchPendingRequests } =
     trpc.serviceRequests.getPendingRequestsForTable.useQuery(
       { tableId: table?.id || "" },
@@ -79,7 +73,6 @@ export default function CustomerMenu() {
       },
     });
 
-  // ── Order mutation ─────────────────────────────────────────────────────────
   const createOrderMutation = trpc.qrOrders.createCustomerOrder.useMutation({
     onSuccess: (order) => {
       toast.success("Order submitted successfully!");
@@ -93,7 +86,6 @@ export default function CustomerMenu() {
     },
   });
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
   const isRequestPending = (type: "call_waiter" | "clean_table") =>
     pendingRequests?.requests?.some((r: any) => r.requestType === type);
 
@@ -169,7 +161,6 @@ export default function CustomerMenu() {
     });
   };
 
-  // ── Category filter (optional UX improvement) ─────────────────────────────
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
 
   const categories = useMemo(() => {
@@ -187,11 +178,18 @@ export default function CustomerMenu() {
 
   const filteredMenu = useMemo(() => {
     if (!menuData) return [];
-    if (!activeCategoryId) return menuData;
-    return menuData.filter((item: any) => item.categoryId === activeCategoryId);
-  }, [menuData, activeCategoryId]);
+    let items = menuData;
+    if (activeCategoryId) {
+      items = items.filter((item: any) => item.categoryId === activeCategoryId);
+    }
+    if (searchQuery) {
+      items = items.filter((item: any) => 
+        item.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    return items;
+  }, [menuData, activeCategoryId, searchQuery]);
 
-  // ── LOADING STATE ──────────────────────────────────────────────────────────
   if (isLoadingTable || isLoadingMenu) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 gap-3">
@@ -201,7 +199,6 @@ export default function CustomerMenu() {
     );
   }
 
-  // ── ERROR STATE: invalid token ─────────────────────────────────────────────
   if (tableError || !table) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
@@ -216,7 +213,6 @@ export default function CustomerMenu() {
     );
   }
 
-  // ── ERROR STATE: menu fetch failed ────────────────────────────────────────
   if (menuError) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
@@ -231,7 +227,6 @@ export default function CustomerMenu() {
     );
   }
 
-  // ── EMPTY STATE: no menu items ─────────────────────────────────────────────
   if (!menuData || menuData.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
@@ -246,208 +241,215 @@ export default function CustomerMenu() {
     );
   }
 
-  // ── DATA STATE: render menu ────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 pb-32">
-      {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-30 shadow-sm">
-        <div className="px-4 py-3 flex items-center justify-between max-w-7xl mx-auto">
+    <div className="min-h-screen bg-white pb-32 font-sans" dir="rtl">
+      {/* Top Header */}
+      <div className="bg-white sticky top-0 z-40 px-4 py-4 flex items-center justify-between border-b">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <ArrowLeft className="w-6 h-6" />
+          </Button>
           <div>
-            <h1 className="text-lg font-bold text-gray-900 leading-tight">
-              {table.cafeteriaName || "Cafe"}
+            <h1 className="text-lg font-bold text-gray-900 line-clamp-1">
+              {table.cafeteriaName || "المقهى"}
             </h1>
-            <p className="text-xs text-gray-500 font-medium">
-              Table {table.tableNumber}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "rounded-full transition-colors",
-                isRequestPending("call_waiter")
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-blue-50 text-blue-600"
-              )}
-              onClick={() => handleServiceRequest("call_waiter")}
-              disabled={
-                createServiceRequestMutation.isPending ||
-                !!isRequestPending("call_waiter")
-              }
-            >
-              <Bell className="w-5 h-5" />
-            </Button>
-            <div className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-full font-bold text-sm">
-              <ShoppingCart className="w-4 h-4" />
-              <span>{getTotalItemsCount()}</span>
-            </div>
+            <p className="text-xs text-gray-500">طاولة {table.tableNumber}</p>
           </div>
         </div>
-
-        {/* Category filter tabs */}
-        {categories.length > 1 && (
-          <div className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide">
-            <button
-              className={cn(
-                "shrink-0 text-xs px-3 py-1 rounded-full border font-medium transition-colors",
-                !activeCategoryId
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-600 border-gray-200"
-              )}
-              onClick={() => setActiveCategoryId(null)}
-            >
-              All
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                className={cn(
-                  "shrink-0 text-xs px-3 py-1 rounded-full border font-medium transition-colors",
-                  activeCategoryId === cat.id
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-200"
-                )}
-                onClick={() =>
-                  setActiveCategoryId(
-                    activeCategoryId === cat.id ? null : cat.id
-                  )
-                }
-              >
-                {cat.name}
-              </button>
-            ))}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <Heart className="w-6 h-6 text-gray-600" />
+          </Button>
+          <div className="relative">
+            <Button variant="ghost" size="icon" className="rounded-full bg-gray-100">
+              <ShoppingCart className="w-6 h-6 text-gray-900" />
+            </Button>
+            {getTotalItemsCount() > 0 && (
+              <span className="absolute -top-1 -left-1 bg-orange-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">
+                {getTotalItemsCount()}
+              </span>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-2 py-4">
-        {/* Menu Grid — compact 2-column on mobile */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-          {filteredMenu.map((item: any) => {
-            const quantity = getItemQuantity(item.id);
-            const isNoteActive = activeNoteId === item.id;
+      {/* Search Bar */}
+      <div className="px-4 py-4">
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <Input 
+            placeholder="ابحث عن مشروب أو وجبة..."
+            className="pr-10 h-12 bg-gray-50 border-none rounded-xl focus-visible:ring-1 focus-visible:ring-gray-200"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
 
-            return (
-              <Card
-                key={item.id}
-                className={cn(
-                  "overflow-hidden flex flex-col border-gray-200 p-2",
-                  !item.available && "opacity-60 grayscale"
-                )}
-              >
-                <div className="flex flex-col h-full">
-                  <div className="flex justify-between items-start gap-1 mb-1">
-                    <h3 className="font-bold text-gray-900 text-xs line-clamp-2 leading-tight">
-                      {item.name}
-                    </h3>
-                    <span className="font-bold text-blue-600 text-xs whitespace-nowrap">
-                      ${Number(item.price).toFixed(2)}
-                    </span>
-                  </div>
+      {/* Categories */}
+      {categories.length > 0 && (
+        <div className="px-4 pb-4 overflow-x-auto flex gap-2 no-scrollbar">
+          <button
+            onClick={() => setActiveCategoryId(null)}
+            className={cn(
+              "px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all",
+              !activeCategoryId 
+                ? "bg-gray-900 text-white shadow-md" 
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            )}
+          >
+            الكل
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategoryId(cat.id)}
+              className={cn(
+                "px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all",
+                activeCategoryId === cat.id 
+                  ? "bg-gray-900 text-white shadow-md" 
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              )}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+      )}
 
-                  {/* Quantity Control */}
-                  <div className="mt-auto flex items-center justify-between gap-1">
-                    <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 rounded-md hover:bg-white"
-                        onClick={() => updateQuantity(item, -1)}
-                        disabled={!item.available || quantity === 0}
-                      >
-                        <Minus className="w-3 h-3" />
-                      </Button>
-                      <span className="text-xs font-bold w-5 text-center">
-                        {quantity}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 rounded-md hover:bg-white"
-                        onClick={() => updateQuantity(item, 1)}
-                        disabled={!item.available}
-                      >
-                        <Plus className="w-3 h-3" />
-                      </Button>
-                    </div>
+      {/* Menu Grid */}
+      <div className="px-4 grid grid-cols-2 gap-4">
+        {filteredMenu.map((item: any) => {
+          const quantity = getItemQuantity(item.id);
+          const isNoteActive = activeNoteId === item.id;
 
-                    {/* Note Toggle */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-7 w-7 rounded-full",
-                        itemNotes[item.id] || isNoteActive
-                          ? "text-blue-600 bg-blue-50"
-                          : "text-gray-400"
-                      )}
-                      onClick={() =>
-                        setActiveNoteId(isNoteActive ? null : item.id)
-                      }
+          return (
+            <div key={item.id} className="flex flex-col">
+              <div className="relative aspect-square bg-gray-50 rounded-3xl overflow-hidden mb-3 group">
+                {/* Placeholder Image or Item Image */}
+                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                  <UtensilsCrossed className="w-12 h-12" />
+                </div>
+                
+                {/* Favorite Toggle */}
+                <button className="absolute top-3 right-3 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm">
+                  <Heart className="w-4 h-4 text-gray-600" />
+                </button>
+
+                {/* Add/Quantity Overlay */}
+                <div className="absolute bottom-3 left-3 right-3">
+                  {quantity === 0 ? (
+                    <button 
+                      onClick={() => updateQuantity(item, 1)}
+                      className="w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
                     >
-                      <MessageSquare className="w-4 h-4" />
-                    </Button>
-                  </div>
-
-                  {/* Inline Note Input */}
-                  {isNoteActive && (
-                    <div className="mt-2 flex gap-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                      <Input
-                        placeholder="Note…"
-                        className="h-7 text-[10px] px-2 border-gray-200 focus:ring-0"
-                        value={itemNotes[item.id] || ""}
-                        onChange={(e) =>
-                          handleNoteChange(item.id, e.target.value)
-                        }
-                        autoFocus
-                      />
-                      <Button
-                        size="icon"
-                        className="h-7 w-7 shrink-0 bg-green-600 hover:bg-green-700"
-                        onClick={() => setActiveNoteId(null)}
+                      <Plus className="w-6 h-6 text-orange-600" />
+                    </button>
+                  ) : (
+                    <div className="bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-between p-1">
+                      <button 
+                        onClick={() => updateQuantity(item, -1)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-100"
                       >
-                        <Check className="w-3 h-3" />
-                      </Button>
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="font-bold text-sm">{quantity}</span>
+                      <button 
+                        onClick={() => updateQuantity(item, 1)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-orange-600 hover:bg-gray-100"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
                     </div>
-                  )}
-
-                  {itemNotes[item.id] && !isNoteActive && (
-                    <p className="mt-1 text-[10px] text-gray-500 italic truncate px-1">
-                      "{itemNotes[item.id]}"
-                    </p>
                   )}
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+              </div>
+
+              <h3 className="font-bold text-gray-900 text-sm mb-1 line-clamp-2 leading-snug px-1">
+                {item.name}
+              </h3>
+              
+              <div className="flex items-center justify-between px-1">
+                <div className="flex flex-col">
+                  <span className="font-black text-gray-900 text-base">
+                    {Number(item.price).toFixed(2)} <span className="text-[10px] font-bold">ج.م</span>
+                  </span>
+                  {/* Optional: Add a crossed-out original price if available in schema */}
+                </div>
+                
+                <button 
+                  onClick={() => setActiveNoteId(isNoteActive ? null : item.id)}
+                  className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+                    itemNotes[item.id] ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-100"
+                  )}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Inline Note Input */}
+              {isNoteActive && (
+                <div className="mt-2 flex gap-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <Input
+                    placeholder="ملاحظات..."
+                    className="h-8 text-xs bg-gray-50 border-none rounded-lg"
+                    value={itemNotes[item.id] || ""}
+                    onChange={(e) => handleNoteChange(item.id, e.target.value)}
+                    autoFocus
+                  />
+                  <Button
+                    size="icon"
+                    className="h-8 w-8 shrink-0 bg-green-600 hover:bg-green-700 rounded-lg"
+                    onClick={() => setActiveNoteId(null)}
+                  >
+                    <Check className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Sticky Bottom Bar */}
       {cart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] z-40">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t p-4 pb-8 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-6">
             <div className="flex flex-col">
-              <span className="text-xs text-gray-500 font-medium">
-                Total Amount
-              </span>
-              <span className="text-xl font-bold text-gray-900">
-                ${getTotalAmount().toFixed(2)}
+              <span className="text-xs text-gray-500 font-bold mb-1">إجمالي الطلب</span>
+              <span className="text-2xl font-black text-gray-900">
+                {getTotalAmount().toFixed(2)} <span className="text-xs font-bold">ج.م</span>
               </span>
             </div>
             <Button
-              className="flex-1 h-12 text-base font-bold bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100"
+              className="flex-1 h-14 text-lg font-black bg-orange-600 hover:bg-orange-700 text-white rounded-2xl shadow-xl shadow-orange-200 transition-all active:scale-95"
               disabled={createOrderMutation.isPending}
               onClick={submitOrder}
             >
-              {createOrderMutation.isPending
-                ? "Placing Order…"
-                : `Order ${getTotalItemsCount()} Items`}
+              {createOrderMutation.isPending ? "جاري الطلب..." : "أضف للسلة"}
             </Button>
           </div>
         </div>
       )}
+
+      {/* Service Request FAB */}
+      <div className="fixed bottom-24 left-4 z-40">
+        <Button
+          variant="outline"
+          size="icon"
+          className={cn(
+            "w-12 h-12 rounded-full shadow-lg border-none transition-all",
+            isRequestPending("call_waiter")
+              ? "bg-yellow-100 text-yellow-700"
+              : "bg-gray-900 text-white"
+          )}
+          onClick={() => handleServiceRequest("call_waiter")}
+          disabled={createServiceRequestMutation.isPending || !!isRequestPending("call_waiter")}
+        >
+          <Bell className="w-6 h-6" />
+        </Button>
+      </div>
     </div>
   );
 }
