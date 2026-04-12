@@ -111,34 +111,51 @@ export const ordersRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
-      const ordersResult = await (db.query as any).orders.findMany({
-        where: and(
-          eq(orders.cafeteriaId, input.cafeteriaId),
-          input.status ? eq(orders.status, input.status) : undefined
-        ),
-        with: {
-          table: true,
-          waiter: true,
-          orderItems: {
-            with: {
-              menuItem: true,
-            },
-          },
-        },
-        orderBy: asc(orders.createdAt),
-      });
+      const ordersResult = await db
+        .select({
+          order: orders,
+          table: cafeteriaTables,
+          waiter: cafeteriaStaff,
+        })
+        .from(orders)
+        .leftJoin(cafeteriaTables, eq(orders.tableId, cafeteriaTables.id))
+        .leftJoin(cafeteriaStaff, eq(orders.waiterId, cafeteriaStaff.id))
+        .where(
+          and(
+            eq(orders.cafeteriaId, input.cafeteriaId),
+            input.status ? eq(orders.status, input.status) : undefined
+          )
+        )
+        .orderBy(asc(orders.createdAt));
 
-      return (ordersResult as any[]).map(order => ({
-        ...order,
-        totalAmount: Number(order.totalAmount),
-        pointsConsumed: Number(order.pointsConsumed),
-        items: (order.orderItems as any[]).map(item => ({
-          ...item,
-          unitPrice: Number(item.unitPrice),
-          totalPrice: Number(item.totalPrice),
-          menuItem: item.menuItem ? { ...item.menuItem, price: Number(item.menuItem.price) } : undefined,
-        })),
-      }));
+      const ordersWithItems = await Promise.all(
+        ordersResult.map(async (row: any) => {
+          const items = await db
+            .select({
+              item: orderItems,
+              menuItem: menuItems,
+            })
+            .from(orderItems)
+            .leftJoin(menuItems, eq(orderItems.menuItemId, menuItems.id))
+            .where(eq(orderItems.orderId, row.order.id));
+
+          return {
+            ...row.order,
+            table: row.table,
+            waiter: row.waiter,
+            totalAmount: Number(row.order.totalAmount),
+            pointsConsumed: Number(row.order.pointsConsumed),
+            items: items.map((i: any) => ({
+              ...i.item,
+              unitPrice: Number(i.item.unitPrice),
+              totalPrice: Number(i.item.totalPrice),
+              menuItem: i.menuItem ? { ...i.menuItem, price: Number(i.menuItem.price) } : undefined,
+            })),
+          };
+        })
+      );
+
+      return ordersWithItems;
     }),
 
   getOrderDetails: protectedProcedure
@@ -148,15 +165,21 @@ export const ordersRouter = router({
       if (!db) throw new Error("Database not available");
 
       const orderResult = await db
-        .select()
+        .select({
+          order: orders,
+          cafeteria: {
+            name: cafeterias.name,
+          },
+        })
         .from(orders)
+        .leftJoin(cafeterias, eq(orders.cafeteriaId, cafeterias.id))
         .where(eq(orders.id, input.orderId));
 
       if (orderResult.length === 0) {
         throw new Error("Order not found");
       }
 
-      const order = orderResult[0];
+      const { order, cafeteria } = orderResult[0];
       const items = await db
         .select()
         .from(orderItems)
@@ -165,6 +188,7 @@ export const ordersRouter = router({
       return {
         id: order.id,
         cafeteriaId: order.cafeteriaId,
+        cafeteriaName: cafeteria?.name || null,
         tableId: order.tableId,
         waiterId: order.waiterId,
         totalAmount: Number(order.totalAmount) || 0,

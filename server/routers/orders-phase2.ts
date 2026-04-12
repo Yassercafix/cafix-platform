@@ -683,41 +683,55 @@ export const getOrders = protectedProcedure
     if (!db) throw new Error("Database not available");
 
     // Fetch orders with table and items
-    const ordersResult = await (db.query as any).orders.findMany({
-      where: and(
-        eq(orders.cafeteriaId, input.cafeteriaId),
-        input.status ? eq(orders.status, input.status) : undefined
-      ),
-      with: {
-        table: true,
-        orderItems: {
-          with: {
-            menuItem: true,
-          },
-        },
-      },
-      orderBy: desc(orders.createdAt),
-    });
+    const ordersResult = await db
+      .select({
+        order: orders,
+        table: cafeteriaTables,
+      })
+      .from(orders)
+      .leftJoin(cafeteriaTables, eq(orders.tableId, cafeteriaTables.id))
+      .where(
+        and(
+          eq(orders.cafeteriaId, input.cafeteriaId),
+          input.status ? eq(orders.status, input.status) : undefined
+        )
+      )
+      .orderBy(desc(orders.createdAt));
 
-    return (ordersResult as any[]).map((order: any) => ({
-      id: order.id,
-      cafeteriaId: order.cafeteriaId,
-      tableId: order.tableId,
-      table: order.table,
-      waiterId: order.waiterId,
-      totalAmount: Number(order.totalAmount),
-      status: order.status,
-      pointsConsumed: Number(order.pointsConsumed),
-      orderItems: (order.orderItems as any[]).map((item: any) => ({
-        ...item,
-        unitPrice: Number(item.unitPrice),
-        totalPrice: Number(item.totalPrice),
-        menuItem: item.menuItem,
-      })),
-      createdAt: order.createdAt,
-      paidAt: order.paidAt,
-      cancelledAt: order.cancelledAt,
-    }));
+    const ordersWithItems = await Promise.all(
+      ordersResult.map(async (row: any) => {
+        const items = await db
+          .select({
+            item: orderItems,
+            menuItem: menuItems,
+          })
+          .from(orderItems)
+          .leftJoin(menuItems, eq(orderItems.menuItemId, menuItems.id))
+          .where(eq(orderItems.orderId, row.order.id));
+
+        return {
+          id: row.order.id,
+          cafeteriaId: row.order.cafeteriaId,
+          tableId: row.order.tableId,
+          table: row.table,
+          waiterId: row.order.waiterId,
+          totalAmount: Number(row.order.totalAmount),
+          status: row.order.status,
+          pointsConsumed: Number(row.order.pointsConsumed),
+          orderItems: items.map((i: any) => ({
+            ...i.item,
+            unitPrice: Number(i.item.unitPrice),
+            totalPrice: Number(i.item.totalPrice),
+            menuItem: i.menuItem,
+          })),
+          createdAt: row.order.createdAt,
+          paidAt: row.order.paidAt,
+          cancelledAt: row.order.cancelledAt,
+        };
+      })
+    );
+
+    return ordersWithItems;
   });
 
 /**
@@ -729,13 +743,22 @@ export const getOrderDetails = protectedProcedure
     const db = await getDb();
     if (!db) throw new Error("Database not available");
 
-    const orderResult = await db.select().from(orders).where(eq(orders.id, input.orderId));
+    const orderResult = await db
+      .select({
+        order: orders,
+        cafeteria: {
+          name: cafeterias.name,
+        },
+      })
+      .from(orders)
+      .leftJoin(cafeterias, eq(orders.cafeteriaId, cafeterias.id))
+      .where(eq(orders.id, input.orderId));
 
     if (orderResult.length === 0) {
       throw new Error("Order not found");
     }
 
-    const order = orderResult[0];
+    const { order, cafeteria } = orderResult[0];
 
     // Check view permission
     const userContext: UserContext = {
@@ -754,6 +777,7 @@ export const getOrderDetails = protectedProcedure
     return {
       id: order.id,
       cafeteriaId: order.cafeteriaId,
+      cafeteriaName: cafeteria?.name || null,
       tableId: order.tableId,
       waiterId: order.waiterId,
       totalAmount: Number(order.totalAmount),
