@@ -40,6 +40,7 @@ import {
   getTableStatusFromMultipleOrders,
 } from "../utils/tableStateEngine.js";
 import { roundTo, addPrecise, subtractPrecise } from "../utils/precision.js";
+import { normalizeStatus } from "../utils/statusNormalizer.js";
 
 /**
  * Create a new order in "created" state
@@ -731,7 +732,10 @@ export const getOrders = protectedProcedure
       })
     );
 
-    return ordersWithItems;
+    return ordersWithItems.map((order: any) => ({
+      ...order,
+      status: normalizeStatus(order.status),
+    }));
   });
 
 /**
@@ -781,7 +785,7 @@ export const getOrderDetails = protectedProcedure
       tableId: order.tableId,
       waiterId: order.waiterId,
       totalAmount: Number(order.totalAmount),
-      status: order.status,
+      status: normalizeStatus(order.status),
       pointsConsumed: Number(order.pointsConsumed),
       items: items.map((item: any) => ({
         id: item.id,
