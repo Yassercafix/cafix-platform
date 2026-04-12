@@ -3,8 +3,8 @@ import { publicProcedure, router } from "../_core/trpc.js";
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db.js";
-import { cafeteriaTables, orders, orderItems, menuItems } from "../../drizzle/schema.js";
-import { and } from "drizzle-orm";
+import { cafeteriaTables, orders, orderItems, menuItems, menuCategories } from "../../drizzle/schema.js";
+import { and, inArray } from "drizzle-orm";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -48,6 +48,60 @@ export const qrOrdersRouter = router({
         status: tableData.status,
         cafeteriaName,
       };
+    }),
+
+  /**
+   * Get menu items for a table by token (public endpoint)
+   * Resolves token → cafeteriaId → menu items
+   * This is the public version of menu.getMenuItems for customer QR pages
+   */
+  getMenuForTable: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      // Step 1: Resolve table from token
+      const tableResult = await db
+        .select()
+        .from(cafeteriaTables)
+        .where(eq(cafeteriaTables.tableToken, input.token));
+
+      if (!tableResult || tableResult.length === 0) {
+        logger.warn("GET_MENU_ERROR", "Invalid table token", { token: input.token });
+        throw new Error("Invalid table token");
+      }
+
+      const table = tableResult[0];
+      const cafeteriaId = table.cafeteriaId;
+
+      // Step 2: Get categories for this cafeteria
+      const categories = await db
+        .select()
+        .from(menuCategories)
+        .where(eq(menuCategories.cafeteriaId, cafeteriaId));
+
+      if (categories.length === 0) {
+        return [];
+      }
+
+      const categoryIds = categories.map((c: any) => c.id);
+
+      // Step 3: Get menu items for these categories
+      const items = await db
+        .select()
+        .from(menuItems)
+        .where(inArray(menuItems.categoryId, categoryIds));
+
+      return items.map((item: any) => ({
+        id: item.id,
+        categoryId: item.categoryId,
+        name: item.name,
+        description: item.description,
+        price: Number(item.price) || 0,
+        available: item.available,
+        createdAt: item.createdAt,
+      }));
     }),
 
   /**
