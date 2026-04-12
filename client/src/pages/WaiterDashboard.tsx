@@ -451,11 +451,30 @@ export default function WaiterDashboard() {
                           </Badge>
                         </div>
                         <div className="text-sm text-gray-600">
-                          Table: {order.tableId ? `#${order.tableId.slice(0, 4)}` : "N/A"} | {formatCurrency(order.totalAmount)}
+                          Table: {order.table?.tableNumber ? `#${order.table.tableNumber}` : "N/A"} | {formatCurrency(order.totalAmount)}
                         </div>
                         <div className="text-xs text-blue-600 font-semibold mt-1">
                           ⏱️ {elapsedTimes[order.id] || "0s"}
                         </div>
+                        {/* Order Items */}
+                        {order.orderItems && order.orderItems.length > 0 && (
+                          <div className="mt-2 text-xs text-gray-700 border-t pt-2">
+                            <div className="font-semibold mb-1">Items:</div>
+                            {order.orderItems.map((item: any) => (
+                              <div key={item.id} className="flex justify-between mb-1">
+                                <span>{item.menuItem?.name || `Item ${item.menuItemId}`} x{item.quantity}</span>
+                                <span className="text-gray-500">{formatCurrency(item.totalPrice)}</span>
+                              </div>
+                            ))}
+                            {order.orderItems.some((item: any) => item.notes) && (
+                              <div className="mt-1 pt-1 border-t text-orange-600 italic">
+                                {order.orderItems.filter((item: any) => item.notes).map((item: any) => (
+                                  <div key={item.id}>📝 {item.notes}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {order.status === "created" && (
