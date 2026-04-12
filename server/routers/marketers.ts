@@ -59,15 +59,45 @@ export const marketersRouter = router({
         throw new Error("Only the owner can create level 1 marketers");
       }
 
-      // Check if email already exists in marketers table
-      const existingMarketer = await db
+      // Check if loginUsername already exists across all account tables (system-wide uniqueness)
+      const existingInMarketers = await db
         .select()
         .from(marketers)
         .where(eq(marketers.loginUsername, input.loginUsername))
         .limit(1);
 
-      if (existingMarketer.length > 0) {
-        throw new Error(`A marketer with email ${input.loginUsername} already exists`);
+      if (existingInMarketers.length > 0) {
+        throw new Error("Login username already exists in system (Marketer)");
+      }
+
+      const existingInCafeterias = await db
+        .select()
+        .from(cafeterias)
+        .where(eq(cafeterias.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInCafeterias.length > 0) {
+        throw new Error("Login username already exists in system (Cafeteria)");
+      }
+
+      const existingInStaff = await db
+        .select()
+        .from(cafeteriaStaff)
+        .where(eq(cafeteriaStaff.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInStaff.length > 0) {
+        throw new Error("Login username already exists in system (Staff)");
+      }
+
+      const existingInUsers = await db
+        .select()
+        .from(users)
+        .where(eq(users.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInUsers.length > 0) {
+        throw new Error("Login username already exists in system (User)");
       }
 
       // Hash the password for storage in our DB
@@ -165,15 +195,45 @@ export const marketersRouter = router({
         throw new Error(`Marketer at level ${parentDepth} cannot create child marketers (level 3 is the limit)`);
       }
 
-      // Check if email already exists
-      const existingMarketer = await db
+      // Check if loginUsername already exists across all account tables (system-wide uniqueness)
+      const existingInMarketers = await db
         .select()
         .from(marketers)
         .where(eq(marketers.loginUsername, input.loginUsername))
         .limit(1);
 
-      if (existingMarketer.length > 0) {
-        throw new Error(`A marketer with email ${input.loginUsername} already exists`);
+      if (existingInMarketers.length > 0) {
+        throw new Error("Login username already exists in system (Marketer)");
+      }
+
+      const existingInCafeterias = await db
+        .select()
+        .from(cafeterias)
+        .where(eq(cafeterias.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInCafeterias.length > 0) {
+        throw new Error("Login username already exists in system (Cafeteria)");
+      }
+
+      const existingInStaff = await db
+        .select()
+        .from(cafeteriaStaff)
+        .where(eq(cafeteriaStaff.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInStaff.length > 0) {
+        throw new Error("Login username already exists in system (Staff)");
+      }
+
+      const existingInUsers = await db
+        .select()
+        .from(users)
+        .where(eq(users.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInUsers.length > 0) {
+        throw new Error("Login username already exists in system (User)");
       }
 
       // Generate child reference code
@@ -260,15 +320,45 @@ export const marketersRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
-      // Check if cafeteria email already exists
-      const existingCafeteria = await db
+      // Check if loginUsername already exists across all account tables (system-wide uniqueness)
+      const existingInCafeterias = await db
         .select()
         .from(cafeterias)
         .where(eq(cafeterias.loginUsername, input.loginUsername))
         .limit(1);
 
-      if (existingCafeteria.length > 0) {
-        throw new Error(`A cafeteria with email ${input.loginUsername} already exists`);
+      if (existingInCafeterias.length > 0) {
+        throw new Error("Login username already exists in system (Cafeteria)");
+      }
+
+      const existingInMarketers = await db
+        .select()
+        .from(marketers)
+        .where(eq(marketers.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInMarketers.length > 0) {
+        throw new Error("Login username already exists in system (Marketer)");
+      }
+
+      const existingInStaff = await db
+        .select()
+        .from(cafeteriaStaff)
+        .where(eq(cafeteriaStaff.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInStaff.length > 0) {
+        throw new Error("Login username already exists in system (Staff)");
+      }
+
+      const existingInUsers = await db
+        .select()
+        .from(users)
+        .where(eq(users.loginUsername, input.loginUsername))
+        .limit(1);
+
+      if (existingInUsers.length > 0) {
+        throw new Error("Login username already exists in system (User)");
       }
 
       let marketerRecord: any = null;
