@@ -60,6 +60,8 @@ export const staffStatusEnum = pgEnum("staff_status", ["active", "inactive"]);
 export const staffRoleEnum = pgEnum("staff_role", ["cafeteria_admin", "manager", "waiter", "chef"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "approved", "rejected"]);
 export const entityStatusEnum = pgEnum("entity_status", ["active", "frozen"]);
+export const paymentMethodEnum = pgEnum("payment_method", ["cash", "points", "online"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["pending", "paid", "cancelled"]);
 
 // ============================================================================
 // 1. USERS TABLE - Authentication & Authorization
@@ -634,6 +636,8 @@ export const orders = pgTable(
     status: orderStatusEnum("status").default("created"),
     pointsConsumed: decimal("pointsConsumed", { precision: 10, scale: 2 }).default("0"),
     source: varchar("source", { length: 50 }).default("staff"),
+    paymentMethod: paymentMethodEnum("paymentMethod").default("cash"),
+    paymentStatus: paymentStatusEnum("paymentStatus").default("pending"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     paidAt: timestamp("paidAt"),
     cancelledAt: timestamp("cancelledAt"),

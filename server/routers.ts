@@ -26,6 +26,8 @@ import { reportsRouter } from "./routers/reports.js";
 import { ordersPhase2Router } from "./routers/orders-phase2.js";
 import { splitBillPhase2Router } from "./routers/splitBill-phase2.js";
 import { serviceRequestsRouter } from "./routers/serviceRequests.js";
+import { paymentsRouter } from "./routers/payments.js";
+import { businessReportingRouter } from "./routers/business-reporting.js";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -61,6 +63,10 @@ export const appRouter = router({
   chefRouting: chefRoutingRouter,
   realtimeUpdates: realtimeUpdatesRouter,
   billing: billingRouter,
+
+  // Payments & Business
+  payments: paymentsRouter,
+  businessReporting: businessReportingRouter,
 });
 
 export type AppRouter = typeof appRouter;
