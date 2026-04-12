@@ -1038,3 +1038,119 @@ export const serviceRequestsRelations = relations(serviceRequests, ({ one }) => 
     references: [cafeteriaTables.id],
   }),
 }));
+
+
+// ============================================================================
+// POINTS SYSTEM TABLES
+// ============================================================================
+
+// Conversion Rate Table - Owner-controlled exchange rates
+export const conversionRates = pgTable(
+  "conversionRates",
+  {
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    ownerId: text("ownerId").notNull(),
+    usdToPoints: decimal("usdToPoints", { precision: 10, scale: 4 }).notNull(), // e.g., 1 USD = 10 points
+    pointsToUsd: decimal("pointsToUsd", { precision: 10, scale: 4 }).notNull(), // e.g., 1 point = 0.1 USD
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+  }
+);
+
+export type ConversionRate = typeof conversionRates.$inferSelect;
+export type InsertConversionRate = typeof conversionRates.$inferInsert;
+
+// Point Transactions - Track all point movements
+export const pointTransactions = pgTable(
+  "pointTransactions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    cafeteriaId: text("cafeteriaId").notNull(),
+    transactionType: varchar("transactionType", { length: 50 }).notNull(), // "recharge", "commission", "withdrawal", "usage"
+    amount: decimal("amount", { precision: 15, scale: 2 }).notNull(), // Points amount
+    balanceBefore: decimal("balanceBefore", { precision: 15, scale: 2 }).notNull(),
+    balanceAfter: decimal("balanceAfter", { precision: 15, scale: 2 }).notNull(),
+    relatedId: text("relatedId"), // Link to recharge/commission/withdrawal request
+    description: text("description"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  }
+);
+
+export type PointTransaction = typeof pointTransactions.$inferSelect;
+export type InsertPointTransaction = typeof pointTransactions.$inferInsert;
+
+// Recharge Requests - Cafeteria admin requests points
+export const rechargeRequests = pgTable(
+  "rechargeRequests",
+  {
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    cafeteriaId: text("cafeteriaId").notNull(),
+    requestedByStaffId: text("requestedByStaffId").notNull(),
+    usdAmount: decimal("usdAmount", { precision: 15, scale: 2 }).notNull(),
+    pointsAmount: decimal("pointsAmount", { precision: 15, scale: 2 }).notNull(),
+    status: rechargeStatusEnum("status").default("pending").notNull(),
+    approvedByOwnerId: text("approvedByOwnerId"),
+    rejectionReason: text("rejectionReason"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    approvedAt: timestamp("approvedAt"),
+  }
+);
+
+export type RechargeRequest = typeof rechargeRequests.$inferSelect;
+export type InsertRechargeRequest = typeof rechargeRequests.$inferInsert;
+
+// Commission Records - Track marketer commissions
+export const commissionRecords = pgTable(
+  "commissionRecords",
+  {
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    marketerId: text("marketerId").notNull(),
+    orderId: text("orderId").notNull(),
+    cafeteriaId: text("cafeteriaId").notNull(),
+    commissionPercentage: decimal("commissionPercentage", { precision: 5, scale: 2 }).notNull(),
+    orderAmount: decimal("orderAmount", { precision: 15, scale: 2 }).notNull(),
+    commissionAmount: decimal("commissionAmount", { precision: 15, scale: 2 }).notNull(), // In USD
+    commissionPoints: decimal("commissionPoints", { precision: 15, scale: 2 }).notNull(), // Converted to points
+    status: commissionStatusEnum("status").default("pending").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  }
+);
+
+export type CommissionRecord = typeof commissionRecords.$inferSelect;
+export type InsertCommissionRecord = typeof commissionRecords.$inferInsert;
+
+// Withdrawal Requests - Marketer requests to withdraw commissions
+export const withdrawalRequests = pgTable(
+  "withdrawalRequests",
+  {
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    marketerId: text("marketerId").notNull(),
+    pointsAmount: decimal("pointsAmount", { precision: 15, scale: 2 }).notNull(),
+    usdAmount: decimal("usdAmount", { precision: 15, scale: 2 }).notNull(),
+    status: withdrawalStatusEnum("status").default("pending").notNull(),
+    approvedByOwnerId: text("approvedByOwnerId"),
+    rejectionReason: text("rejectionReason"),
+    markedAsPaidAt: timestamp("markedAsPaidAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    approvedAt: timestamp("approvedAt"),
+  }
+);
+
+export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
+export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert;
+
+// Commission Configuration - Owner sets commission rates per marketer
+export const commissionConfigs = pgTable(
+  "commissionConfigs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    ownerId: text("ownerId").notNull(),
+    marketerId: text("marketerId").notNull(),
+    commissionPercentage: decimal("commissionPercentage", { precision: 5, scale: 2 }).notNull(), // e.g., 5.00 for 5%
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+  }
+);
+
+export type CommissionConfig = typeof commissionConfigs.$inferSelect;
+export type InsertCommissionConfig = typeof commissionConfigs.$inferInsert;

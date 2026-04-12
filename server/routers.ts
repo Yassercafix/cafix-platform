@@ -28,6 +28,9 @@ import { splitBillPhase2Router } from "./routers/splitBill-phase2.js";
 import { serviceRequestsRouter } from "./routers/serviceRequests.js";
 import { paymentsRouter } from "./routers/payments.js";
 import { businessReportingRouter } from "./routers/business-reporting.js";
+import { pointsManagementRouter } from "./routers/points-management.js";
+import { commissionManagementRouter } from "./routers/commission-management.js";
+import { withdrawalManagementRouter } from "./routers/withdrawal-management.js";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -67,6 +70,9 @@ export const appRouter = router({
   // Payments & Business
   payments: paymentsRouter,
   businessReporting: businessReportingRouter,
+  pointsManagement: pointsManagementRouter,
+  commissionManagement: commissionManagementRouter,
+  withdrawalManagement: withdrawalManagementRouter,
 });
 
 export type AppRouter = typeof appRouter;
