@@ -12,6 +12,7 @@ export type UserRole = "owner" | "marketer" | "cafeteria_admin" | "manager" | "w
  * Maps current state to allowed next states
  */
 const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["created", "sent_to_kitchen", "cancelled"],
   created: ["sent_to_kitchen", "cancelled"],
   sent_to_kitchen: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],
@@ -26,6 +27,9 @@ const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
  * Maps transition to allowed roles
  */
 const ROLE_PERMISSIONS: Record<string, UserRole[]> = {
+  "pending->created": ["waiter", "cafeteria_admin", "manager"],
+  "pending->sent_to_kitchen": ["waiter", "cafeteria_admin", "manager"],
+  "pending->cancelled": ["waiter", "cafeteria_admin", "manager"],
   "created->sent_to_kitchen": ["waiter", "cafeteria_admin", "manager"],
   "sent_to_kitchen->preparing": ["chef", "cafeteria_admin", "manager"],
   "preparing->ready": ["chef", "cafeteria_admin", "manager"],
@@ -167,6 +171,7 @@ export function isInProgress(status: OrderStatus): boolean {
  */
 export function getStateDisplayName(status: OrderStatus): string {
   const displayNames: Record<OrderStatus, string> = {
+    pending: "Pending Approval",
     created: "Created",
     sent_to_kitchen: "Sent to Kitchen",
     preparing: "Preparing",
@@ -183,6 +188,7 @@ export function getStateDisplayName(status: OrderStatus): string {
  */
 export function getStateProgress(status: OrderStatus): number {
   const progressMap: Record<OrderStatus, number> = {
+    pending: 5,
     created: 10,
     sent_to_kitchen: 25,
     preparing: 40,

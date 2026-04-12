@@ -682,28 +682,38 @@ export const getOrders = protectedProcedure
     const db = await getDb();
     if (!db) throw new Error("Database not available");
 
-    const conditions = [eq(orders.cafeteriaId, input.cafeteriaId)];
-    if (input.status) {
-      conditions.push(eq(orders.status, input.status));
-    }
-    if (input.waiterId) {
-      conditions.push(eq(orders.waiterId, input.waiterId));
-    }
+    // Fetch orders with table and items
+    const ordersResult = await (db.query as any).orders.findMany({
+      where: and(
+        eq(orders.cafeteriaId, input.cafeteriaId),
+        input.status ? eq(orders.status, input.status) : undefined
+      ),
+      with: {
+        table: true,
+        orderItems: {
+          with: {
+            menuItem: true,
+          },
+        },
+      },
+      orderBy: desc(orders.createdAt),
+    });
 
-    const result = await db
-      .select()
-      .from(orders)
-      .where(and(...conditions))
-      .orderBy(desc(orders.createdAt));
-
-    return result.map((order: any) => ({
+    return (ordersResult as any[]).map((order: any) => ({
       id: order.id,
       cafeteriaId: order.cafeteriaId,
       tableId: order.tableId,
+      table: order.table,
       waiterId: order.waiterId,
       totalAmount: Number(order.totalAmount),
       status: order.status,
       pointsConsumed: Number(order.pointsConsumed),
+      orderItems: (order.orderItems as any[]).map((item: any) => ({
+        ...item,
+        unitPrice: Number(item.unitPrice),
+        totalPrice: Number(item.totalPrice),
+        menuItem: item.menuItem,
+      })),
       createdAt: order.createdAt,
       paidAt: order.paidAt,
       cancelledAt: order.cancelledAt,
@@ -785,10 +795,26 @@ export const getKitchenQueue = staffProcedure
       return [];
     }
 
-    // Get items in kitchen queue
+    // Get items in kitchen queue with names and table numbers
     const items = await db
-      .select()
+      .select({
+        id: orderItems.id,
+        orderId: orderItems.orderId,
+        menuItemId: orderItems.menuItemId,
+        quantity: orderItems.quantity,
+        unitPrice: orderItems.unitPrice,
+        totalPrice: orderItems.totalPrice,
+        status: orderItems.status,
+        notes: orderItems.notes,
+        sentToKitchenAt: orderItems.sentToKitchenAt,
+        preparingAt: orderItems.preparingAt,
+        itemName: menuItems.name,
+        tableNumber: cafeteriaTables.tableNumber,
+      })
       .from(orderItems)
+      .leftJoin(menuItems, eq(orderItems.menuItemId, menuItems.id))
+      .leftJoin(orders, eq(orderItems.orderId, orders.id))
+      .leftJoin(cafeteriaTables, eq(orders.tableId, cafeteriaTables.id))
       .where(
         and(
           inArray(orderItems.orderId, orderIds),
@@ -801,6 +827,8 @@ export const getKitchenQueue = staffProcedure
       id: item.id,
       orderId: item.orderId,
       menuItemId: item.menuItemId,
+      itemName: item.itemName,
+      tableNumber: item.tableNumber,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
       totalPrice: Number(item.totalPrice),

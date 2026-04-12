@@ -66,7 +66,7 @@ export default function WaiterDashboard() {
   );
 
   const openOrders = useMemo(() => {
-    return activeOrders?.filter((o: any) => ["created", "sent_to_kitchen", "preparing", "ready", "served"].includes(o.status)) || [];
+    return activeOrders?.filter((o: any) => ["pending", "created", "sent_to_kitchen", "preparing", "ready", "served"].includes(o.status)) || [];
   }, [activeOrders]);
 
   // Update elapsed times every second
@@ -477,7 +477,7 @@ export default function WaiterDashboard() {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {order.status === "created" && (
+                        {["pending", "created"].includes(order.status) && (
                           <Button onClick={() => handleConfirmOrder(order.id)} size="sm">Confirm</Button>
                         )}
                         {order.status === "ready" && (
