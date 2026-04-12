@@ -32,7 +32,7 @@ export const systemRouter = router({
       const tablesResult = await db
         .select()
         .from(cafeteriaTables)
-        .where(sql`${cafeteriaTables.status} != 'free'`);
+        .where(sql`${cafeteriaTables.status} != 'available'`);
       activeTables = tablesResult.length;
 
       const ordersResult = await db

@@ -149,7 +149,7 @@ export async function getDb() {
         sectionId TEXT,
         name TEXT NOT NULL,
         referenceCode TEXT UNIQUE,
-        status TEXT DEFAULT 'free',
+        status TEXT DEFAULT 'available',
         capacity INTEGER DEFAULT 4,
         qrCodeUrl TEXT,
         createdAt INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP

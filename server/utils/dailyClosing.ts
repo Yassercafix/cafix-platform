@@ -48,10 +48,10 @@ export async function closeDay(cafeteriaId: string): Promise<DailySummary> {
       )
     );
 
-  // 3. Reset all tables to free
+  // 3. Reset all tables to available
   await db
     .update(cafeteriaTables)
-    .set({ status: "free" })
+    .set({ status: "available" })
     .where(eq(cafeteriaTables.cafeteriaId, cafeteriaId));
 
   logger.info("DAILY_CLOSE", `Day closed for cafeteria ${cafeteriaId}`, { 

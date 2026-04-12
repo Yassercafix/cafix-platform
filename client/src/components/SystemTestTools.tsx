@@ -20,7 +20,7 @@ export function SystemTestTools({ cafeteriaId }: SystemTestToolsProps) {
     setSimulating(true);
     try {
       const tables = await trpcVanilla.tables.getTables.query({ cafeteriaId });
-      const availableTable = tables.find((t: any) => t.status === "available" || t.status === "free");
+      const availableTable = tables.find((t: any) => t.status === "available");
 
       if (!availableTable) {
         toast.error("No available tables to simulate order");
@@ -62,7 +62,7 @@ export function SystemTestTools({ cafeteriaId }: SystemTestToolsProps) {
         if (table.status !== "available") {
           await trpcVanilla.tables.updateTableStatus.mutate({
             tableId: table.id,
-            status: "free" as const,
+            status: "available" as const,
           });
         }
       }

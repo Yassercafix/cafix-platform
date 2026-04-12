@@ -228,7 +228,7 @@ async function seedPhase3() {
             sectionId: cafeSecs[s],
             tableNumber: tableNum,
             capacity: 4,
-            status: "free",
+            status: "available",
             qrCode: `QR-${cafeteriaId}-T${tableNum}`,
             createdAt: new Date(),
           });

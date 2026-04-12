@@ -71,8 +71,7 @@ export function getStatusColor(
   status: string
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (status?.toLowerCase()) {
-    case "free":
-    case "available":
+        case "available":
       return "default";
     case "occupied":
       return "secondary";

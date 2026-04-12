@@ -4,18 +4,37 @@ import { nanoid } from "nanoid";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db.js";
 import { cafeteriaTables, sections } from "../../drizzle/schema.js";
-import { getPlanContext, assertLimit, assertFeature } from "../utils/planGuard.js";
 import {
-  getTablesBySection,
-  getAvailableTablesInSection,
-  getBestFitTable,
-  getSectionStats,
-  getCafeteriaOccupancy,
   validateTableData,
   validateSectionData,
-  getTableStatusDistribution,
 } from "../utils/tableEngine.js";
 import { generateQRPrintLayout } from "../utils/qrPrintKit.js";
+
+const DEFAULT_SECTION_NAME = "All";
+
+async function ensureDefaultSection(db: any, cafeteriaId: string) {
+  const existingSections = await db
+    .select()
+    .from(sections)
+    .where(eq(sections.cafeteriaId, cafeteriaId));
+
+  if (existingSections.length > 0) {
+    const allSection = existingSections.find((section: any) => section.name === DEFAULT_SECTION_NAME);
+    return allSection || existingSections.sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0))[0];
+  }
+
+  const now = new Date();
+  const defaultSection = {
+    id: nanoid(),
+    cafeteriaId,
+    name: DEFAULT_SECTION_NAME,
+    displayOrder: 0,
+    createdAt: now,
+  };
+
+  await db.insert(sections).values(defaultSection);
+  return defaultSection;
+}
 
 export const tablesRouter = router({
   createSection: protectedProcedure
@@ -29,22 +48,6 @@ export const tablesRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
-      // Enforce plan limits for sections
-      const planContext = await getPlanContext(input.cafeteriaId);
-      // Allow at least one section even on starter plan to enable table creation
-      const db_sections = await db
-        .select()
-        .from(sections)
-        .where(eq(sections.cafeteriaId, input.cafeteriaId));
-      
-      if (db_sections.length > 0) {
-        assertFeature(
-          planContext, 
-          "sections", 
-          `Multiple sections is a premium feature. Your current ${planContext.plan} plan does not support this.`
-        );
-      }
-
       const validation = validateSectionData(input.name);
       if (!validation.valid) {
         throw new Error(validation.errors.join(", "));
@@ -56,7 +59,7 @@ export const tablesRouter = router({
       await db.insert(sections).values({
         id,
         cafeteriaId: input.cafeteriaId,
-        name: input.name,
+        name: input.name.trim(),
         displayOrder: 0,
         createdAt: now,
       });
@@ -64,7 +67,8 @@ export const tablesRouter = router({
       return {
         id,
         cafeteriaId: input.cafeteriaId,
-        name: input.name,
+        name: input.name.trim(),
+        displayOrder: 0,
         createdAt: now,
       };
     }),
@@ -75,25 +79,33 @@ export const tablesRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
+      await ensureDefaultSection(db, input.cafeteriaId);
+
       const result = await db
         .select()
         .from(sections)
         .where(eq(sections.cafeteriaId, input.cafeteriaId));
 
-      return result.map((section: any) => ({
-        id: section.id,
-        cafeteriaId: section.cafeteriaId,
-        name: section.name,
-        displayOrder: section.displayOrder || 0,
-        createdAt: section.createdAt,
-      }));
+      return result
+        .sort((a: any, b: any) => {
+          if (a.name === DEFAULT_SECTION_NAME) return -1;
+          if (b.name === DEFAULT_SECTION_NAME) return 1;
+          return (a.displayOrder || 0) - (b.displayOrder || 0);
+        })
+        .map((section: any) => ({
+          id: section.id,
+          cafeteriaId: section.cafeteriaId,
+          name: section.name,
+          displayOrder: section.displayOrder || 0,
+          createdAt: section.createdAt,
+        }));
     }),
 
   createTable: protectedProcedure
     .input(
       z.object({
         cafeteriaId: z.string(),
-        sectionId: z.string(),
+        sectionId: z.string().optional(),
         tableNumber: z.number().positive(),
         capacity: z.number().positive(),
       })
@@ -102,46 +114,45 @@ export const tablesRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
-      // Enforce plan limits for tables
-      const planContext = await getPlanContext(input.cafeteriaId);
-      const currentTables = await db
-        .select()
-        .from(cafeteriaTables)
-        .where(eq(cafeteriaTables.cafeteriaId, input.cafeteriaId));
-      
-      assertLimit(
-        planContext, 
-        "maxTables", 
-        currentTables.length, 
-        `Your current ${planContext.plan} plan only allows up to ${planContext.limits.maxTables} tables.`
-      );
+      const defaultSection = await ensureDefaultSection(db, input.cafeteriaId);
+      const sectionId = input.sectionId || defaultSection.id;
 
-      const validation = validateTableData(input.tableNumber, input.capacity, input.sectionId);
+      const validation = validateTableData(input.tableNumber, input.capacity, sectionId);
       if (!validation.valid) {
         throw new Error(validation.errors.join(", "));
+      }
+
+      const existingTable = await db
+        .select({ id: cafeteriaTables.id })
+        .from(cafeteriaTables)
+        .where(and(
+          eq(cafeteriaTables.cafeteriaId, input.cafeteriaId),
+          eq(cafeteriaTables.tableNumber, input.tableNumber),
+        ));
+
+      if (existingTable.length > 0) {
+        throw new Error(`Table ${input.tableNumber} already exists.`);
       }
 
       const id = nanoid();
       const tableToken = nanoid(32);
       const now = new Date();
 
-      console.log("[TablesRouter] Inserting table:", { id, tableNumber: input.tableNumber, sectionId: input.sectionId });
       await db.insert(cafeteriaTables).values({
         id,
         cafeteriaId: input.cafeteriaId,
-        sectionId: input.sectionId,
+        sectionId,
         tableNumber: input.tableNumber,
         capacity: input.capacity,
         status: "available",
         tableToken,
         createdAt: now,
       });
-      console.log("[TablesRouter] Table inserted successfully");
 
       return {
         id,
         cafeteriaId: input.cafeteriaId,
-        sectionId: input.sectionId,
+        sectionId,
         tableNumber: input.tableNumber,
         capacity: input.capacity,
         status: "available",
@@ -161,6 +172,8 @@ export const tablesRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
 
+      await ensureDefaultSection(db, input.cafeteriaId);
+
       const conditions = [eq(cafeteriaTables.cafeteriaId, input.cafeteriaId)];
       if (input.sectionId) {
         conditions.push(eq(cafeteriaTables.sectionId, input.sectionId));
@@ -177,7 +190,7 @@ export const tablesRouter = router({
         sectionId: table.sectionId,
         tableNumber: table.tableNumber,
         capacity: table.capacity,
-        status: table.status,
+        status: table.status || "available",
         tableToken: table.tableToken,
         createdAt: table.createdAt,
       }));

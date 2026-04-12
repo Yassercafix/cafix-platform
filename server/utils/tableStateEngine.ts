@@ -16,11 +16,11 @@ export function getTableStatusFromOrderStatus(orderStatus: OrderStatus): TableSt
     preparing: "in_progress",
     ready: "ready",
     served: "served",
-    paid: "free",
-    cancelled: "free",
+    paid: "available",
+    cancelled: "available",
   };
 
-  return statusMap[orderStatus] || "free";
+  return statusMap[orderStatus] || "available";
 }
 
 /**
@@ -31,7 +31,7 @@ export function getTableStatusFromMultipleOrders(
   orderStatuses: OrderStatus[]
 ): TableStatus {
   if (orderStatuses.length === 0) {
-    return "free";
+    return "available";
   }
 
   // Priority order: paid/cancelled are final, served, ready, in_progress, occupied
@@ -47,7 +47,7 @@ export function getTableStatusFromMultipleOrders(
 
   // Find the highest priority status
   let maxPriority = 0;
-  let resultStatus: TableStatus = "free";
+  let resultStatus: TableStatus = "available";
 
   for (const status of orderStatuses) {
     const priority = statusPriority[status] || 0;
@@ -64,15 +64,15 @@ export function getTableStatusFromMultipleOrders(
  * Check if table can accept new orders
  */
 export function canTableAcceptNewOrder(tableStatus: TableStatus): boolean {
-  // Only free tables can accept new orders
-  return tableStatus === "free";
+  // Only available tables can accept new orders
+  return tableStatus === "available";
 }
 
 /**
  * Check if table has active orders
  */
 export function tableHasActiveOrders(tableStatus: TableStatus): boolean {
-  return tableStatus !== "free";
+  return tableStatus !== "available";
 }
 
 /**
@@ -80,7 +80,7 @@ export function tableHasActiveOrders(tableStatus: TableStatus): boolean {
  */
 export function getTableStatusDisplayName(status: TableStatus): string {
   const displayNames: Record<TableStatus, string> = {
-    free: "Free",
+    available: "Available",
     occupied: "Occupied",
     in_progress: "In Progress",
     ready: "Ready",
@@ -94,7 +94,7 @@ export function getTableStatusDisplayName(status: TableStatus): string {
  */
 export function getTableStatusColor(status: TableStatus): string {
   const colorMap: Record<TableStatus, string> = {
-    free: "green",
+    available: "green",
     occupied: "blue",
     in_progress: "orange",
     ready: "yellow",
@@ -107,7 +107,7 @@ export function getTableStatusColor(status: TableStatus): string {
  * Check if table status indicates service is complete
  */
 export function isServiceComplete(tableStatus: TableStatus): boolean {
-  return ["served", "free"].includes(tableStatus);
+  return ["served", "available"].includes(tableStatus);
 }
 
 /**
@@ -123,11 +123,11 @@ export function isServiceActive(tableStatus: TableStatus): boolean {
  */
 export function getEstimatedTimeToComplete(tableStatus: TableStatus): number {
   const timeMap: Record<TableStatus, number> = {
-    free: 0,
-    occupied: 30, // 30 minutes to prepare
-    in_progress: 20, // 20 minutes cooking
-    ready: 5, // 5 minutes to serve
-    served: 2, // 2 minutes to pay
+    available: 0,
+    occupied: 30,
+    in_progress: 20,
+    ready: 5,
+    served: 2,
   };
   return timeMap[tableStatus] || 0;
 }
@@ -139,13 +139,12 @@ export function isValidTableStatusTransition(
   currentStatus: TableStatus,
   nextStatus: TableStatus
 ): boolean {
-  // Define valid transitions
   const validTransitions: Record<TableStatus, TableStatus[]> = {
-    free: ["occupied"],
-    occupied: ["in_progress", "free"], // Can go back to free if cancelled
-    in_progress: ["ready", "free"], // Can go back to free if cancelled
-    ready: ["served", "free"], // Can go back to free if cancelled
-    served: ["free"],
+    available: ["occupied"],
+    occupied: ["in_progress", "available"],
+    in_progress: ["ready", "available"],
+    ready: ["served", "available"],
+    served: ["available"],
   };
 
   const allowed = validTransitions[currentStatus] || [];
@@ -159,11 +158,11 @@ export function getNextExpectedTableStatus(
   currentStatus: TableStatus
 ): TableStatus | null {
   const nextMap: Record<TableStatus, TableStatus | null> = {
-    free: null,
+    available: null,
     occupied: "in_progress",
     in_progress: "ready",
     ready: "served",
-    served: "free",
+    served: "available",
   };
   return nextMap[currentStatus] || null;
 }
@@ -176,7 +175,7 @@ export function calculateOccupancyDuration(
   endTime: Date = new Date()
 ): number {
   const durationMs = endTime.getTime() - startTime.getTime();
-  return Math.floor(durationMs / (1000 * 60)); // Convert to minutes
+  return Math.floor(durationMs / (1000 * 60));
 }
 
 /**

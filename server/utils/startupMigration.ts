@@ -2,17 +2,16 @@
  * Startup Migration Utility
  *
  * Applies safe, idempotent ALTER TABLE migrations at server startup.
- * Uses "ADD COLUMN IF NOT EXISTS" so it is safe to run multiple times.
+ * Uses guarded SQL so it is safe to run multiple times.
  *
- * This resolves the production issue where the `sections` and
- * `cafeteriaTables` tables were created without the `cafeteriaId` column
- * (legacy SQLite-era schema) before the PostgreSQL migration was applied.
+ * This resolves legacy schema issues around sections and cafeteria tables,
+ * and patches old table status values so the live database matches the
+ * current application enum contract.
  */
 import { getDb } from "../db.js";
 import { sql } from "drizzle-orm";
 
 const MIGRATIONS: { name: string; sql: string }[] = [
-  // ── sections table ────────────────────────────────────────────────────────
   {
     name: "sections: add cafeteriaId column",
     sql: `ALTER TABLE "sections" ADD COLUMN IF NOT EXISTS "cafeteriaId" text NOT NULL DEFAULT ''`,
@@ -29,7 +28,6 @@ const MIGRATIONS: { name: string; sql: string }[] = [
     name: "sections: add createdAt column",
     sql: `ALTER TABLE "sections" ADD COLUMN IF NOT EXISTS "createdAt" timestamp DEFAULT now() NOT NULL`,
   },
-  // ── cafeteriaTables table ─────────────────────────────────────────────────
   {
     name: "cafeteriaTables: add cafeteriaId column",
     sql: `ALTER TABLE "cafeteriaTables" ADD COLUMN IF NOT EXISTS "cafeteriaId" text NOT NULL DEFAULT ''`,
@@ -54,7 +52,6 @@ const MIGRATIONS: { name: string; sql: string }[] = [
     name: "cafeteriaTables: add createdAt column",
     sql: `ALTER TABLE "cafeteriaTables" ADD COLUMN IF NOT EXISTS "createdAt" timestamp DEFAULT now() NOT NULL`,
   },
-  // ── cafeterias: ensure subscriptionPlan column exists ─────────────────────
   {
     name: "cafeterias: add subscriptionPlan column",
     sql: `ALTER TABLE "cafeterias" ADD COLUMN IF NOT EXISTS "subscriptionPlan" varchar(50) DEFAULT 'starter'`,
@@ -63,7 +60,6 @@ const MIGRATIONS: { name: string; sql: string }[] = [
     name: "cafeterias: add subscriptionStatus column",
     sql: `ALTER TABLE "cafeterias" ADD COLUMN IF NOT EXISTS "subscriptionStatus" varchar(50) DEFAULT 'active'`,
   },
-  // ── Create sections table if it does not exist at all ─────────────────────
   {
     name: "sections: create table if not exists",
     sql: `
@@ -76,7 +72,6 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       )
     `,
   },
-  // ── Create cafeteriaTables if it does not exist at all ────────────────────
   {
     name: "cafeteriaTables: create table if not exists",
     sql: `
@@ -92,13 +87,58 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       )
     `,
   },
+  {
+    name: "cafeteriaTables: normalize legacy free status values",
+    sql: `
+      UPDATE "cafeteriaTables"
+      SET "status" = 'available'
+      WHERE "status" = 'free'
+    `,
+  },
+  {
+    name: "postgres enum: allow available for table_status",
+    sql: `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM pg_type t
+          WHERE t.typname = 'table_status'
+        ) THEN
+          ALTER TYPE "table_status" ADD VALUE IF NOT EXISTS 'available';
+        END IF;
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `,
+  },
+  {
+    name: "postgres enum: rename free to available for table_status",
+    sql: `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM pg_enum e
+          JOIN pg_type t ON t.oid = e.enumtypid
+          WHERE t.typname = 'table_status'
+            AND e.enumlabel = 'free'
+        ) THEN
+          ALTER TYPE "table_status" RENAME VALUE 'free' TO 'available';
+        END IF;
+      EXCEPTION
+        WHEN invalid_parameter_value THEN NULL;
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `,
+  },
 ];
 
-let _migrationRan = false;
+let migrationRan = false;
 
 export async function runStartupMigrations(): Promise<void> {
-  if (_migrationRan) return;
-  _migrationRan = true;
+  if (migrationRan) return;
+  migrationRan = true;
 
   let db: any;
   try {
@@ -115,13 +155,12 @@ export async function runStartupMigrations(): Promise<void> {
       await db.execute(sql.raw(migration.sql));
       console.log(`[StartupMigration] ✓ ${migration.name}`);
     } catch (err: any) {
-      // Ignore "already exists" or "does not exist" errors — these are expected
-      // when the column already exists or the table doesn't exist yet.
       const msg = err?.message ?? "";
       if (
         msg.includes("already exists") ||
         msg.includes("duplicate column") ||
-        msg.includes("does not exist")
+        msg.includes("does not exist") ||
+        msg.includes("cannot be cast automatically")
       ) {
         console.log(`[StartupMigration] ~ ${migration.name} (skipped: ${msg.split("\n")[0]})`);
       } else {

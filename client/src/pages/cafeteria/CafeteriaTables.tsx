@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { useTranslation } from '@/locales/useTranslation';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { DashboardNavigation } from '@/components/DashboardNavigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import {
   Table2, LayoutDashboard, UtensilsCrossed, Users, BarChart3, CreditCard, Settings,
-  Plus, Edit, Trash2, QrCode, Layers, AlertCircle, Printer, Download, FileText
+  Plus, Trash2, QrCode, Layers, Printer, Download
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
@@ -39,24 +38,22 @@ interface TableItem {
 export default function CafeteriaTables() {
   const { user, loading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const { language } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
   const isRTL = language === 'ar';
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [showAddSectionDialog, setShowAddSectionDialog] = useState(false);
   const [showAddTableDialog, setShowAddTableDialog] = useState(false);
-  const [showEditTableDialog, setShowEditTableDialog] = useState(false);
   const [showDeleteTableDialog, setShowDeleteTableDialog] = useState(false);
   const [showQRPreviewDialog, setShowQRPreviewDialog] = useState(false);
 
   const [selectedTable, setSelectedTable] = useState<TableItem | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
-
+  const [qrDataUrl, setQrDataUrl] = useState('');
   const [sectionForm, setSectionForm] = useState({ name: '' });
   const [tableForm, setTableForm] = useState({ tableNumber: '', capacity: '4', sectionId: '' });
 
   const cafeteriaId = user?.cafeteriaId;
+  const utils = trpc.useContext();
 
-  // tRPC Queries
   const sectionsQuery = trpc.tables.getSections.useQuery(
     { cafeteriaId: cafeteriaId || '' },
     { enabled: !!cafeteriaId }
@@ -67,12 +64,40 @@ export default function CafeteriaTables() {
     { enabled: !!cafeteriaId }
   );
 
-  // tRPC Mutations
-  const utils = trpc.useContext();
-  
+  const sections: Section[] = useMemo(() => {
+    return (sectionsQuery.data || []).map((section: any) => ({
+      id: section.id,
+      name: section.name,
+      cafeteriaId: section.cafeteriaId,
+    }));
+  }, [sectionsQuery.data]);
+
+  const defaultSectionId = sections[0]?.id || '';
+
+  useEffect(() => {
+    if (!tableForm.sectionId && defaultSectionId) {
+      setTableForm((current) => ({ ...current, sectionId: defaultSectionId }));
+    }
+  }, [defaultSectionId, tableForm.sectionId]);
+
+  const tables: TableItem[] = useMemo(() => {
+    return (tablesQuery.data || []).map((table: any) => ({
+      id: table.id,
+      tableNumber: table.tableNumber,
+      capacity: table.capacity,
+      status: table.status,
+      sectionId: table.sectionId,
+      sectionName: sections.find((section) => section.id === table.sectionId)?.name || sections[0]?.name,
+      tableToken: table.tableToken,
+      cafeteriaId: table.cafeteriaId,
+    }));
+  }, [tablesQuery.data, sections]);
+
+  const loading = sectionsQuery.isLoading || tablesQuery.isLoading;
+
   const createSectionMutation = trpc.tables.createSection.useMutation({
-    onSuccess: () => {
-      utils.tables.getSections.invalidate();
+    onSuccess: async () => {
+      await utils.tables.getSections.invalidate();
       toast.success(isRTL ? 'تم إضافة القسم بنجاح' : 'Section added successfully');
       setShowAddSectionDialog(false);
       setSectionForm({ name: '' });
@@ -83,11 +108,14 @@ export default function CafeteriaTables() {
   });
 
   const createTableMutation = trpc.tables.createTable.useMutation({
-    onSuccess: () => {
-      utils.tables.getTables.invalidate();
+    onSuccess: async () => {
+      await Promise.all([
+        utils.tables.getSections.invalidate(),
+        utils.tables.getTables.invalidate(),
+      ]);
       toast.success(isRTL ? 'تم إضافة الطاولة بنجاح' : 'Table added successfully');
       setShowAddTableDialog(false);
-      setTableForm({ tableNumber: '', capacity: '4', sectionId: '' });
+      setTableForm({ tableNumber: '', capacity: '4', sectionId: defaultSectionId });
     },
     onError: (err) => {
       toast.error(err.message || (isRTL ? 'خطأ في إضافة الطاولة' : 'Error adding table'));
@@ -95,8 +123,8 @@ export default function CafeteriaTables() {
   });
 
   const deleteTableMutation = trpc.tables.deleteTable.useMutation({
-    onSuccess: () => {
-      utils.tables.getTables.invalidate();
+    onSuccess: async () => {
+      await utils.tables.getTables.invalidate();
       toast.success(isRTL ? 'تم حذف الطاولة بنجاح' : 'Table deleted successfully');
       setShowDeleteTableDialog(false);
       setSelectedTable(null);
@@ -105,25 +133,6 @@ export default function CafeteriaTables() {
       toast.error(err.message || (isRTL ? 'خطأ في حذف الطاولة' : 'Error deleting table'));
     }
   });
-
-  const sections = (sectionsQuery.data || []).map((s: any) => ({
-    id: s.id,
-    name: s.name,
-    cafeteriaId: s.cafeteriaId
-  }));
-
-  const tables = (tablesQuery.data || []).map((t: any) => ({
-    id: t.id,
-    tableNumber: t.tableNumber,
-    capacity: t.capacity,
-    status: t.status,
-    sectionId: t.sectionId,
-    sectionName: sections.find((s: any) => s.id === t.sectionId)?.name,
-    tableToken: t.tableToken,
-    cafeteriaId: t.cafeteriaId
-  }));
-
-  const loading = sectionsQuery.isLoading || tablesQuery.isLoading;
 
   const navigationItems = [
     { label: isRTL ? 'لوحة التحكم' : 'Dashboard', path: '/dashboard/cafeteria-admin', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -141,35 +150,31 @@ export default function CafeteriaTables() {
       toast.error(isRTL ? 'أدخل اسم القسم' : 'Enter section name');
       return;
     }
-    
-    try {
-      await createSectionMutation.mutateAsync({
-        cafeteriaId,
-        name: sectionForm.name.trim(),
-      });
-      // Success is handled in mutation onSuccess, but we can also ensure it here
-    } catch (err) {
-      // Error is handled in mutation onError
-    }
+
+    await createSectionMutation.mutateAsync({
+      cafeteriaId,
+      name: sectionForm.name.trim(),
+    });
   };
 
   const handleAddTable = async () => {
     if (!cafeteriaId) return;
-    if (!tableForm.tableNumber || !tableForm.sectionId) {
+
+    const sectionId = tableForm.sectionId || defaultSectionId;
+    const tableNumber = parseInt(tableForm.tableNumber, 10);
+    const capacity = parseInt(tableForm.capacity, 10);
+
+    if (!tableNumber || !capacity || !sectionId) {
       toast.error(isRTL ? 'يرجى ملء جميع الحقول' : 'Please fill all fields');
       return;
     }
-    
-    try {
-      await createTableMutation.mutateAsync({
-        cafeteriaId,
-        sectionId: tableForm.sectionId,
-        tableNumber: parseInt(tableForm.tableNumber),
-        capacity: parseInt(tableForm.capacity),
-      });
-    } catch (err) {
-      // Error is handled in mutation onError
-    }
+
+    await createTableMutation.mutateAsync({
+      cafeteriaId,
+      sectionId,
+      tableNumber,
+      capacity,
+    });
   };
 
   const generateQR = async (table: TableItem) => {
@@ -179,25 +184,23 @@ export default function CafeteriaTables() {
       setQrDataUrl(url);
       setSelectedTable(table);
       setShowQRPreviewDialog(true);
-    } catch (err) {
+    } catch {
       toast.error(isRTL ? 'خطأ في توليد الباركود' : 'Error generating QR');
     }
   };
 
   const handleDeleteTable = async () => {
     if (!selectedTable) return;
-    deleteTableMutation.mutate({
-      tableId: selectedTable.id,
-    });
+    deleteTableMutation.mutate({ tableId: selectedTable.id });
   };
 
   const printAllQRs = async () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const qrCodes = await Promise.all(tables.map(async (t: any) => {
-      const url = await QRCode.toDataURL(`${window.location.origin}/order/${t.tableToken}`, { width: 400, margin: 2 });
-      return { url, number: t.tableNumber };
+    const qrCodes = await Promise.all(tables.map(async (table) => {
+      const url = await QRCode.toDataURL(`${window.location.origin}/order/${table.tableToken}`, { width: 400, margin: 2 });
+      return { url, number: table.tableNumber };
     }));
 
     const html = `
@@ -217,7 +220,7 @@ export default function CafeteriaTables() {
         <body>
           ${Array.from({ length: Math.ceil(qrCodes.length / 4) }).map((_, pageIdx) => `
             <div class="page">
-              ${qrCodes.slice(pageIdx * 4, (pageIdx + 1) * 4).map(qr => `
+              ${qrCodes.slice(pageIdx * 4, (pageIdx + 1) * 4).map((qr) => `
                 <div class="qr-container">
                   <div class="cafeteria-name">${user?.name || 'Cafeteria'}</div>
                   <img src="${qr.url}" class="qr-image" />
@@ -235,7 +238,9 @@ export default function CafeteriaTables() {
     printWindow.document.close();
   };
 
-  if (authLoading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
+  if (authLoading || loading) {
+    return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -293,78 +298,76 @@ export default function CafeteriaTables() {
           </Card>
         </div>
 
-        {sections.length === 0 ? (
-          <Card className="border-dashed border-2 bg-slate-50">
-            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="bg-white p-4 rounded-full shadow-sm mb-4"><Layers className="w-8 h-8 text-slate-300" /></div>
-              <h3 className="text-lg font-bold text-slate-900">{isRTL ? 'لا توجد أقسام بعد' : 'No sections yet'}</h3>
-              <p className="text-slate-500 max-w-xs mt-1">{isRTL ? 'يجب إضافة قسم واحد على الأقل (مثل: الصالة الرئيسية) لتتمكن من إضافة الطاولات' : 'Add at least one section (e.g. Main Hall) to start adding tables'}</p>
-              <Button onClick={() => setShowAddSectionDialog(true)} className="mt-6 bg-blue-600 hover:bg-blue-700 text-white">{isRTL ? 'إضافة أول قسم' : 'Add First Section'}</Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-8">
-            {sections.map((section: any) => {
-              const sectionTables = tables.filter((t: any) => t.sectionId === section.id);
-              return (
-                <div key={section.id}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                      <div className="w-2 h-6 bg-blue-600 rounded-full"></div>
-                      {section.name}
-                      <span className="text-sm font-normal text-slate-400 ml-2">({sectionTables.length} {isRTL ? 'طاولة' : 'tables'})</span>
-                    </h2>
-                  </div>
-                  
-                  {sectionTables.length === 0 ? (
-                    <div className="bg-white border rounded-xl p-8 text-center">
-                      <p className="text-slate-400 text-sm">{isRTL ? 'لا توجد طاولات في هذا القسم' : 'No tables in this section'}</p>
-                      <Button variant="link" onClick={() => {
-                        setTableForm({ ...tableForm, sectionId: section.id });
-                        setShowAddTableDialog(true);
-                      }} className="text-blue-600 font-bold">{isRTL ? 'إضافة طاولة' : 'Add Table'}</Button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {sectionTables.map((table: any) => (
-                        <Card key={table.id} className="overflow-hidden hover:shadow-md transition-shadow group">
-                          <CardContent className="p-4">
-                            <div className="flex justify-between items-start mb-4">
-                              <div className="bg-blue-50 text-blue-700 w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg">
-                                {table.tableNumber}
-                              </div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                                  setSelectedTable(table);
-                                  setShowDeleteTableDialog(true);
-                                }}>
-                                  <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                </Button>
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-1 mb-4">
-                              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{isRTL ? 'السعة' : 'Capacity'}</p>
-                              <p className="text-sm font-bold text-slate-700">{table.capacity} {isRTL ? 'أشخاص' : 'Persons'}</p>
-                            </div>
-
-                            <Button onClick={() => generateQR(table)} variant="outline" className="w-full gap-2 text-xs font-bold border-blue-100 text-blue-600 hover:bg-blue-50 hover:border-blue-200">
-                              <QrCode className="w-3.5 h-3.5" />
-                              {isRTL ? 'باركود الطلب' : 'Order QR'}
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
+        <div className="space-y-8">
+          {sections.map((section) => {
+            const sectionTables = tables.filter((table) => table.sectionId === section.id);
+            return (
+              <div key={section.id}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <div className="w-2 h-6 bg-blue-600 rounded-full"></div>
+                    {section.name}
+                    <span className="text-sm font-normal text-slate-400 ml-2">({sectionTables.length} {isRTL ? 'طاولة' : 'tables'})</span>
+                  </h2>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {sectionTables.length === 0 ? (
+                  <div className="bg-white border rounded-xl p-8 text-center">
+                    <p className="text-slate-400 text-sm">{isRTL ? 'لا توجد طاولات في هذا القسم' : 'No tables in this section'}</p>
+                    <Button
+                      variant="link"
+                      onClick={() => {
+                        setTableForm((current) => ({ ...current, sectionId: section.id }));
+                        setShowAddTableDialog(true);
+                      }}
+                      className="text-blue-600 font-bold"
+                    >
+                      {isRTL ? 'إضافة طاولة' : 'Add Table'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {sectionTables.map((table) => (
+                      <Card key={table.id} className="overflow-hidden hover:shadow-md transition-shadow group">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="bg-blue-50 text-blue-700 w-10 h-10 rounded-lg flex items-center justify-center font-black text-lg">
+                              {table.tableNumber}
+                            </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                                setSelectedTable(table);
+                                setShowDeleteTableDialog(true);
+                              }}>
+                                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 mb-2">
+                            <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{isRTL ? 'السعة' : 'Capacity'}</p>
+                            <p className="text-sm font-bold text-slate-700">{table.capacity} {isRTL ? 'أشخاص' : 'Persons'}</p>
+                          </div>
+
+                          <p className="text-xs mb-4 text-green-600 font-semibold">
+                            {table.status === 'available' ? (isRTL ? 'متاحة' : 'Available') : table.status}
+                          </p>
+
+                          <Button onClick={() => generateQR(table)} variant="outline" className="w-full gap-2 text-xs font-bold border-blue-100 text-blue-600 hover:bg-blue-50 hover:border-blue-200">
+                            <QrCode className="w-3.5 h-3.5" />
+                            {isRTL ? 'باركود الطلب' : 'Order QR'}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </main>
 
-      {/* Add Section Dialog */}
       <Dialog open={showAddSectionDialog} onOpenChange={setShowAddSectionDialog}>
         <DialogContent className="max-w-md" dir={isRTL ? 'rtl' : 'ltr'}>
           <DialogHeader><DialogTitle>{isRTL ? 'إضافة قسم جديد' : 'Add New Section'}</DialogTitle></DialogHeader>
@@ -383,7 +386,6 @@ export default function CafeteriaTables() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Table Dialog */}
       <Dialog open={showAddTableDialog} onOpenChange={setShowAddTableDialog}>
         <DialogContent className="max-w-md" dir={isRTL ? 'rtl' : 'ltr'}>
           <DialogHeader><DialogTitle>{isRTL ? 'إضافة طاولة جديدة' : 'Add New Table'}</DialogTitle></DialogHeader>
@@ -394,10 +396,10 @@ export default function CafeteriaTables() {
             </div>
             <div>
               <Label>{isRTL ? 'القسم' : 'Section'}</Label>
-              <Select value={tableForm.sectionId} onValueChange={v => setTableForm({ ...tableForm, sectionId: v })}>
+              <Select value={tableForm.sectionId || defaultSectionId} onValueChange={value => setTableForm({ ...tableForm, sectionId: value })}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder={isRTL ? 'اختر القسم' : 'Select section'} /></SelectTrigger>
                 <SelectContent>
-                  {sections.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {sections.map((section) => <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -415,7 +417,6 @@ export default function CafeteriaTables() {
         </DialogContent>
       </Dialog>
 
-      {/* QR Preview Dialog */}
       <Dialog open={showQRPreviewDialog} onOpenChange={setShowQRPreviewDialog}>
         <DialogContent className="max-w-sm" dir={isRTL ? 'rtl' : 'ltr'}>
           <DialogHeader><DialogTitle>{isRTL ? 'باركود الطاولة' : 'Table QR Code'}</DialogTitle></DialogHeader>
@@ -440,7 +441,6 @@ export default function CafeteriaTables() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Table Alert */}
       <AlertDialog open={showDeleteTableDialog} onOpenChange={setShowDeleteTableDialog}>
         <AlertDialogContent dir={isRTL ? 'rtl' : 'ltr'}>
           <AlertDialogHeader>
