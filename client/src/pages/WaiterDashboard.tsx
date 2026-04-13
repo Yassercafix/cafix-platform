@@ -173,7 +173,7 @@ export default function WaiterDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
-      <header className="bg-gradient-to-r from-white to-orange-50 border-b-2 border-orange-200 shadow-md sticky top-0 z-40">0 shadow-sm">
+      <header className="bg-gradient-to-r from-white to-orange-50 border-b-2 border-orange-200 shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
             <UtensilsCrossed className="w-6 h-6 text-orange-500" />
