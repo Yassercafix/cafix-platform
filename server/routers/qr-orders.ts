@@ -147,14 +147,14 @@ export const qrOrdersRouter = router({
         const now = new Date();
         
         // Find existing open order for this table to maintain one session per table
-        // We use "created" or "pending" as active statuses
+        // We use "pending" as the initial active status
         const existingOpenOrders = await db
           .select()
           .from(orders)
           .where(
             and(
               eq(orders.tableId, table.id),
-              inArray(orders.status, ["created", "pending"])
+              inArray(orders.status, ["pending"])
             )
           )
           .limit(1);
