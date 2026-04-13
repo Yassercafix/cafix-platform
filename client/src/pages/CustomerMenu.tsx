@@ -16,7 +16,8 @@ import {
   UtensilsCrossed,
   Search,
   Heart,
-  ArrowLeft
+  ArrowLeft,
+  Loader2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -76,14 +77,13 @@ export default function CustomerMenu() {
   const createOrderMutation = trpc.qrOrders.createCustomerOrder.useMutation({
     onSuccess: (order) => {
       console.log(`[ORDER_CREATED] Customer order ${order.orderId} created successfully`);
-      toast.success("Order submitted successfully! Status: Pending");
+      toast.success("تم إرسال الطلب بنجاح!");
       setCart([]);
-      setTimeout(() => {
-        navigate(`/order-confirmation/${order.orderId}`);
-      }, 1000);
+      // Redirect to order tracking page
+      navigate(`/order-tracking/${order.orderId}`);
     },
     onError: (error) => {
-      const errorMsg = error.message || "Failed to submit order";
+      const errorMsg = error.message || "فشل في إرسال الطلب";
       console.error('[ORDER_CREATION_ERROR]', errorMsg);
       toast.error(errorMsg);
     },
@@ -152,7 +152,7 @@ export default function CustomerMenu() {
 
   const submitOrder = () => {
     if (cart.length === 0) {
-      toast.error("Please add items to your order");
+      toast.error("يرجى إضافة أصناف إلى طلبك");
       return;
     }
     console.log(`[ORDER_SUBMISSION] Submitting order with ${cart.length} items`);
@@ -392,7 +392,6 @@ export default function CustomerMenu() {
                   <span className="font-black text-gray-900 text-base">
                     {Number(item.price).toFixed(2)} <span className="text-[10px] font-bold">ج.م</span>
                   </span>
-                  {/* Optional: Add a crossed-out original price if available in schema */}
                 </div>
                 
                 <button 
@@ -441,11 +440,18 @@ export default function CustomerMenu() {
               </span>
             </div>
             <Button
-              className="flex-1 h-14 text-lg font-black bg-orange-600 hover:bg-orange-700 text-white rounded-2xl shadow-xl shadow-orange-200 transition-all active:scale-95"
+              className="flex-1 h-14 text-lg font-black bg-orange-600 hover:bg-orange-700 text-white rounded-2xl shadow-xl shadow-orange-200 transition-all active:scale-95 flex items-center justify-center gap-2"
               disabled={createOrderMutation.isPending}
               onClick={submitOrder}
             >
-              {createOrderMutation.isPending ? "جاري الطلب..." : "أضف للسلة"}
+              {createOrderMutation.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>جاري الطلب...</span>
+                </>
+              ) : (
+                "أضف للسلة"
+              )}
             </Button>
           </div>
         </div>
