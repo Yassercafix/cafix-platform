@@ -15,15 +15,15 @@ export type UserRole = "owner" | "marketer" | "cafeteria_admin" | "manager" | "w
  * Flow: pending -> preparing -> ready -> served
  */
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  pending: ["preparing", "cancelled"],
+  pending: ["sent_to_kitchen", "preparing", "cancelled"],
+  sent_to_kitchen: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],
   ready: ["served", "cancelled"],
   served: ["paid"], // Paid is the final accounting state
   paid: [],
   cancelled: [],
   // Legacy states mapping for compatibility during transition
-  created: ["pending", "preparing", "cancelled"],
-  sent_to_kitchen: ["preparing", "cancelled"],
+  created: ["pending", "sent_to_kitchen", "preparing", "cancelled"],
 };
 
 /**
@@ -31,17 +31,20 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
  * Maps transition to allowed roles
  */
 const ROLE_PERMISSIONS: Record<string, UserRole[]> = {
+  "pending->sent_to_kitchen": ["waiter", "cafeteria_admin", "manager"],
   "pending->preparing": ["chef", "cafeteria_admin", "manager"],
+  "sent_to_kitchen->preparing": ["chef", "cafeteria_admin", "manager"],
   "preparing->ready": ["chef", "cafeteria_admin", "manager"],
   "ready->served": ["waiter", "cafeteria_admin", "manager"],
   "served->paid": ["waiter", "cafeteria_admin", "manager"],
   "pending->cancelled": ["waiter", "cafeteria_admin", "manager"],
+  "sent_to_kitchen->cancelled": ["waiter", "cafeteria_admin", "manager"],
   "preparing->cancelled": ["waiter", "cafeteria_admin", "manager"],
   "ready->cancelled": ["manager", "cafeteria_admin"], 
   // Legacy
   "created->pending": ["waiter", "cafeteria_admin", "manager"],
+  "created->sent_to_kitchen": ["waiter", "cafeteria_admin", "manager"],
   "created->preparing": ["chef", "cafeteria_admin", "manager"],
-  "sent_to_kitchen->preparing": ["chef", "cafeteria_admin", "manager"],
 };
 
 /**

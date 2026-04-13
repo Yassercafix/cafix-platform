@@ -74,14 +74,14 @@ export const createOrder = staffProcedure
       cafeteriaId: input.cafeteriaId,
       tableId: input.tableId,
       waiterId: input.waiterId || (ctx as any).staffId,
-      status: "created",
+      status: "pending",
       totalAmount: "0",
       pointsConsumed: "0",
       createdAt: now,
     });
 
       console.log(`[ORDER_CREATED] Order ${id} created for cafeteria ${input.cafeteriaId}`);
-      logger.info("ORDER_CREATED", `Order ${id} created in state 'created'`, {
+      logger.info("ORDER_CREATED", `Order ${id} created in state 'pending'`, {
         orderId: id,
         cafeteriaId: input.cafeteriaId,
         tableId: input.tableId,
@@ -89,7 +89,7 @@ export const createOrder = staffProcedure
 
     return {
       id,
-      status: "created",
+      status: "pending",
       createdAt: now,
     };
   });
@@ -126,9 +126,9 @@ export const addItem = staffProcedure
       const order = orderResult[0];
 
       // Can only add items to orders in "created" state
-      if (order.status !== "created") {
+      if (order.status !== "pending") {
         throw new Error(
-          `Cannot add items to order in state '${order.status}'. Items can only be added in 'created' state.`
+          `Cannot add items to order in state '${order.status}'. Items can only be added in 'pending' state.`
         );
       }
 
@@ -142,7 +142,7 @@ export const addItem = staffProcedure
         quantity: input.quantity,
         unitPrice: String(input.unitPrice),
         totalPrice: String(totalPrice),
-        status: "created",
+        status: "pending",
         notes: input.notes,
         createdAt: new Date(),
       });
@@ -154,14 +154,14 @@ export const addItem = staffProcedure
 
       return {
         id,
-        status: "created",
+        status: "pending",
         totalPrice,
       };
     });
   });
 
 /**
- * Confirm order: created -> sent_to_kitchen
+ * Confirm order: pending -> sent_to_kitchen
  * Waiter confirms order and sends all items to kitchen
  */
 export const confirmOrder = staffProcedure
@@ -677,7 +677,7 @@ export const getOrders = protectedProcedure
     z.object({
       cafeteriaId: z.string(),
       status: z
-        .enum(["created", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"])
+        .enum(["pending", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"])
         .optional(),
       waiterId: z.string().optional(),
     })

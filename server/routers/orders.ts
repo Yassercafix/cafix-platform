@@ -39,7 +39,7 @@ export const ordersRouter = router({
         cafeteriaId: input.cafeteriaId,
         tableId: input.tableId,
         waiterId: input.waiterId,
-        status: "created",
+        status: "pending",
         totalAmount: "0",
         pointsConsumed: "0",
         createdAt: now,
@@ -47,7 +47,7 @@ export const ordersRouter = router({
 
       return {
         id,
-        status: "created",
+        status: "pending",
         createdAt: now,
       };
     }),
@@ -78,7 +78,7 @@ export const ordersRouter = router({
           throw new Error("Order not found");
         }
 
-        if (orderResult[0].status !== "created") {
+        if (orderResult[0].status !== "pending") {
           throw new Error(`Cannot add items to an order with status '${orderResult[0].status}'`);
         }
 
@@ -92,21 +92,21 @@ export const ordersRouter = router({
           quantity: input.quantity,
           unitPrice: String(input.unitPrice),
           totalPrice: String(totalPrice),
-          status: "created",
+          status: "pending",
           notes: input.notes,
           createdAt: new Date(),
         });
 
         return {
           id,
-          status: "created",
+          status: "pending",
           totalPrice,
         };
       });
     }),
 
   getOrders: protectedProcedure
-    .input(z.object({ cafeteriaId: z.string(), status: z.enum(["created", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"]).optional() }))
+    .input(z.object({ cafeteriaId: z.string(), status: z.enum(["pending", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"]).optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
@@ -380,7 +380,7 @@ export const ordersRouter = router({
     }),
 
   updateOrderStatus: staffProcedure
-    .input(z.object({ orderId: z.string(), newStatus: z.enum(["created", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"]) }))
+    .input(z.object({ orderId: z.string(), newStatus: z.enum(["pending", "sent_to_kitchen", "preparing", "ready", "served", "paid", "cancelled"]) }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");

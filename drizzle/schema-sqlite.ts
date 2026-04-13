@@ -147,7 +147,7 @@ export const orders = sqliteTable("orders", {
   cafeteriaId: text("cafeteriaId").notNull(),
   tableId: text("tableId"),
   waiterId: text("waiterId"),
-  status: text("status").default("created").notNull(),
+  status: text("status").default("pending").notNull(),
   totalAmount: text("totalAmount").notNull(),
   pointsDeducted: text("pointsDeducted").default("0"),
   paidAt: integer("paidAt", { mode: 'timestamp' }),
@@ -165,7 +165,7 @@ export const orderItems = sqliteTable("orderItems", {
   quantity: integer("quantity").notNull(),
   unitPrice: text("unitPrice").notNull(),
   totalPrice: text("totalPrice").notNull(),
-  status: text("status").default("created").notNull(),
+  status: text("status").default("pending").notNull(),
   createdAt: integer("createdAt", { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
