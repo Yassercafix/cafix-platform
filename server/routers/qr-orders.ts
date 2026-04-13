@@ -268,9 +268,7 @@ export const qrOrdersRouter = router({
       const orderResult = await db
         .select({
           order: orders,
-          cafeteria: {
-            name: cafeterias.name,
-          },
+          cafeteriaName: cafeterias.name,
         })
         .from(orders)
         .leftJoin(cafeterias, eq(orders.cafeteriaId, cafeterias.id))
@@ -280,7 +278,7 @@ export const qrOrdersRouter = router({
         throw new Error("Order not found");
       }
 
-      const { order, cafeteria } = orderResult[0];
+      const { order, cafeteriaName } = orderResult[0];
 
       // Get order items with names
       const items = await db
@@ -302,7 +300,7 @@ export const qrOrdersRouter = router({
         id: order.id,
         tableId: order.tableId,
         cafeteriaId: order.cafeteriaId,
-        cafeteriaName: cafeteria?.name || null,
+        cafeteriaName: cafeteriaName || null,
         totalAmount: order.totalAmount,
         status: order.status,
         source: order.source,
