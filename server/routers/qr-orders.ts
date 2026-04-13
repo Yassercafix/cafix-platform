@@ -267,7 +267,13 @@ export const qrOrdersRouter = router({
 
       const orderResult = await db
         .select({
-          order: orders,
+          id: orders.id,
+          cafeteriaId: orders.cafeteriaId,
+          tableId: orders.tableId,
+          totalAmount: orders.totalAmount,
+          status: orders.status,
+          source: orders.source,
+          createdAt: orders.createdAt,
           cafeteriaName: cafeterias.name,
         })
         .from(orders)
@@ -278,7 +284,7 @@ export const qrOrdersRouter = router({
         throw new Error("Order not found");
       }
 
-      const { order, cafeteriaName } = orderResult[0];
+      const order = orderResult[0];
 
       // Get order items with names
       const items = await db
@@ -300,7 +306,7 @@ export const qrOrdersRouter = router({
         id: order.id,
         tableId: order.tableId,
         cafeteriaId: order.cafeteriaId,
-        cafeteriaName: cafeteriaName || null,
+        cafeteriaName: order.cafeteriaName || null,
         totalAmount: order.totalAmount,
         status: order.status,
         source: order.source,
