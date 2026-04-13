@@ -34,8 +34,22 @@ export default function CustomerMenu() {
   const params = useParams<{ tableToken?: string }>();
   const tableToken = params.tableToken;
   const [, navigate] = useLocation();
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
+  const [cart, setCart] = React.useState<CartItem[]>(() => {
+    const savedCart = localStorage.getItem("customer_cart");
+    return savedCart ? JSON.parse(savedCart) : [];
+  });
+  const [itemNotes, setItemNotes] = React.useState<Record<string, string>>(() => {
+    const savedNotes = localStorage.getItem("customer_item_notes");
+    return savedNotes ? JSON.parse(savedNotes) : {};
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem("customer_cart", JSON.stringify(cart));
+  }, [cart]);
+
+  React.useEffect(() => {
+    localStorage.setItem("customer_item_notes", JSON.stringify(itemNotes));
+  }, [itemNotes]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -79,6 +93,8 @@ export default function CustomerMenu() {
       console.log(`[ORDER_CREATED] Customer order ${order.orderId} created successfully`);
       toast.success("تم إرسال الطلب بنجاح!");
       setCart([]);
+      localStorage.removeItem("customer_cart");
+      localStorage.removeItem("customer_item_notes");
       // Redirect to order tracking page
       navigate(`/order-tracking/${order.orderId}`);
     },
@@ -265,7 +281,18 @@ export default function CustomerMenu() {
             <Heart className="w-6 h-6 text-gray-600" />
           </Button>
           <div className="relative">
-            <Button variant="ghost" size="icon" className="rounded-full bg-gray-100">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="rounded-full bg-gray-100"
+              onClick={() => {
+                if (cart.length > 0) {
+                  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                } else {
+                  toast.info("السلة فارغة");
+                }
+              }}
+            >
               <ShoppingCart className="w-6 h-6 text-gray-900" />
             </Button>
             {getTotalItemsCount() > 0 && (
@@ -450,7 +477,7 @@ export default function CustomerMenu() {
                   <span>جاري الطلب...</span>
                 </>
               ) : (
-                "أضف للسلة"
+                "تأكيد الطلب"
               )}
             </Button>
           </div>
