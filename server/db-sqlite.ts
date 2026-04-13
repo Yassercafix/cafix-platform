@@ -126,7 +126,7 @@ export async function getDb() {
         cafeteriaId TEXT NOT NULL,
         tableId TEXT,
         waiterId TEXT,
-        status TEXT DEFAULT 'created' NOT NULL,
+        status TEXT DEFAULT 'pending' NOT NULL,
         totalAmount TEXT NOT NULL,
         pointsDeducted TEXT DEFAULT '0',
         paidAt INTEGER,
@@ -140,7 +140,7 @@ export async function getDb() {
         quantity INTEGER NOT NULL,
         unitPrice TEXT NOT NULL,
         totalPrice TEXT NOT NULL,
-        status TEXT DEFAULT 'created' NOT NULL,
+        status TEXT DEFAULT 'pending' NOT NULL,
         createdAt INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS cafeteriaTables (
