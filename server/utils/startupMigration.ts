@@ -133,7 +133,7 @@ const MIGRATIONS: { name: string; sql: string }[] = [
     `,
   },
   {
-    name: "postgres enum: ensure order_status has 'pending' value",
+    name: "postgres enum: ensure order_status has all required values",
     sql: `
       DO $$
       BEGIN
@@ -143,6 +143,12 @@ const MIGRATIONS: { name: string; sql: string }[] = [
           WHERE t.typname = 'order_status'
         ) THEN
           ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'pending';
+          ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'created';
+          ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'sent_to_kitchen';
+          ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'preparing';
+          ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'ready';
+          ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'served';
+          ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'paid';
         END IF;
       EXCEPTION
         WHEN duplicate_object THEN NULL;
@@ -150,7 +156,7 @@ const MIGRATIONS: { name: string; sql: string }[] = [
     `,
   },
   {
-    name: "postgres enum: ensure order_item_status has 'pending' value",
+    name: "postgres enum: ensure order_item_status has all required values",
     sql: `
       DO $$
       BEGIN
@@ -160,10 +166,59 @@ const MIGRATIONS: { name: string; sql: string }[] = [
           WHERE t.typname = 'order_item_status'
         ) THEN
           ALTER TYPE "order_item_status" ADD VALUE IF NOT EXISTS 'pending';
+          ALTER TYPE "order_item_status" ADD VALUE IF NOT EXISTS 'created';
+          ALTER TYPE "order_item_status" ADD VALUE IF NOT EXISTS 'preparing';
+          ALTER TYPE "order_item_status" ADD VALUE IF NOT EXISTS 'paid';
         END IF;
       EXCEPTION
         WHEN duplicate_object THEN NULL;
       END $$;
+    `,
+  },
+  {
+    name: "postgres enum: allow occupied for table_status",
+    sql: `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM pg_type t
+          WHERE t.typname = 'table_status'
+        ) THEN
+          ALTER TYPE "table_status" ADD VALUE IF NOT EXISTS 'occupied';
+        END IF;
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `,
+  },
+  {
+    name: "serviceRequests: create service_request_status enum if not exists",
+    sql: `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_type WHERE typname = 'service_request_status'
+        ) THEN
+          CREATE TYPE "service_request_status" AS ENUM('pending', 'completed');
+        END IF;
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `,
+  },
+  {
+    name: "serviceRequests: create serviceRequests table if not exists",
+    sql: `
+      CREATE TABLE IF NOT EXISTS "serviceRequests" (
+        "id" text PRIMARY KEY NOT NULL,
+        "cafeteriaId" text NOT NULL,
+        "tableId" text NOT NULL,
+        "requestType" varchar(50) NOT NULL,
+        "status" "service_request_status" NOT NULL DEFAULT 'pending',
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "completedAt" timestamp
+      )
     `,
   },
   {
