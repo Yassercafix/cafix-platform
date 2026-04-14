@@ -1,16 +1,10 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-import * as schema from "../drizzle/schema";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+import * as schema from "../drizzle/schema.js";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __cafix_sql__: ReturnType<typeof postgres> | undefined;
-  // eslint-disable-next-line no-var
-  var __cafix_db__:
-    | ReturnType<typeof drizzle<typeof schema>>
-    | undefined;
-}
+const { Pool } = pg;
 
+// Connection string handling
 const connectionString =
   process.env.DIRECT_URL ||
   process.env.DATABASE_URL ||
@@ -29,28 +23,17 @@ if (!connectionString) {
  * - This fixes Vercel runtime issues like:
  *   'unable to open database file'
  */
-const sql =
-  global.__cafix_sql__ ||
-  postgres(connectionString, {
-    max: 10,
-    idle_timeout: 20,
-    connect_timeout: 15,
-    prepare: false,
-  });
+const pool = new Pool({
+  connectionString,
+  max: 10,
+  idleTimeoutMillis: 20000,
+  connectionTimeoutMillis: 15000,
+});
 
-const db =
-  global.__cafix_db__ ||
-  drizzle(sql, {
-    schema,
-    logger: false,
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  global.__cafix_sql__ = sql;
-  global.__cafix_db__ = db;
-}
-
-export { sql, db };
+export const db = drizzle(pool, {
+  schema,
+  logger: false,
+});
 
 export function getDb() {
   return db;
