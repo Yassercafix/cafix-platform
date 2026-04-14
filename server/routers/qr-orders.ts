@@ -44,9 +44,13 @@ export const qrOrdersRouter = router({
       // Fetch cafeteria name
       let cafeteriaName: string | null = null;
       try {
-        const cafResult = await db.select({ name: cafeterias.name }).from(cafeterias).where(eq(cafeterias.id, tableData.cafeteriaId));
-        cafeteriaName = cafResult[0]?.name ?? null;
-      } catch (_) {}
+        if (tableData.cafeteriaId) {
+          const cafResult = await db.select({ name: cafeterias.name }).from(cafeterias).where(eq(cafeterias.id, tableData.cafeteriaId));
+          cafeteriaName = cafResult && cafResult.length > 0 ? cafResult[0].name : null;
+        }
+      } catch (e) {
+        logger.error("RESOLVE_TABLE_CAFETERIA_ERROR", "Failed to fetch cafeteria name", { error: e instanceof Error ? e.message : String(e), cafeteriaId: tableData.cafeteriaId });
+      }
       return {
         id: tableData.id,
         tableNumber: tableData.tableNumber,
