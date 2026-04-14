@@ -132,6 +132,56 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       END $$;
     `,
   },
+  {
+    name: "postgres enum: ensure order_status has 'pending' value",
+    sql: `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM pg_type t
+          WHERE t.typname = 'order_status'
+        ) THEN
+          ALTER TYPE "order_status" ADD VALUE IF NOT EXISTS 'pending';
+        END IF;
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `,
+  },
+  {
+    name: "postgres enum: ensure order_item_status has 'pending' value",
+    sql: `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM pg_type t
+          WHERE t.typname = 'order_item_status'
+        ) THEN
+          ALTER TYPE "order_item_status" ADD VALUE IF NOT EXISTS 'pending';
+        END IF;
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `,
+  },
+  {
+    name: "orders: ensure source column exists",
+    sql: `ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "source" varchar(50) DEFAULT 'staff'`,
+  },
+  {
+    name: "orders: ensure pointsConsumed column exists",
+    sql: `ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "pointsConsumed" decimal(10,2) DEFAULT '0'`,
+  },
+  {
+    name: "orders: ensure totalAmount column exists",
+    sql: `ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "totalAmount" decimal(10,2) DEFAULT '0'`,
+  },
+  {
+    name: "orderItems: ensure notes column exists",
+    sql: `ALTER TABLE "orderItems" ADD COLUMN IF NOT EXISTS "notes" text`,
+  },
 ];
 
 let migrationRan = false;
