@@ -199,10 +199,10 @@ export const qrOrdersRouter = router({
             id: orderId,
             cafeteriaId: cafeteriaId,
             tableId: table.id,
-            totalAmount: String(totalAmount),
+            totalAmount: totalAmount.toFixed(2),
             status: "pending",
             source: "customer",
-            pointsConsumed: "0",
+            pointsConsumed: "0.00",
             createdAt: now,
           });
         } else {
@@ -211,7 +211,7 @@ export const qrOrdersRouter = router({
           await db
             .update(orders)
             .set({
-              totalAmount: String(currentTotal + totalAmount),
+              totalAmount: (currentTotal + totalAmount).toFixed(2),
               status: "pending", // Keep it pending/active
             })
             .where(eq(orders.id, orderId));
@@ -225,8 +225,8 @@ export const qrOrdersRouter = router({
             orderId,
             menuItemId: item.menuItemId,
             quantity: item.quantity,
-            unitPrice: String(item.price),
-            totalPrice: String(item.itemTotal),
+            unitPrice: item.price.toFixed(2),
+            totalPrice: item.itemTotal.toFixed(2),
             status: "pending",
             notes: item.notes || null,
             createdAt: now,
