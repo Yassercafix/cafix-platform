@@ -141,7 +141,12 @@ export const qrOrdersRouter = router({
     .mutation(async ({ input }) => {
       try {
         const db = await getDb();
-        if (!db) throw new Error("Database not available");
+        if (!db) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database not available",
+          });
+        }
 
         // Resolve table from token
         const tableResult = await db
@@ -151,14 +156,20 @@ export const qrOrdersRouter = router({
 
         if (!tableResult || tableResult.length === 0) {
           logger.warn("ORDER_SUBMISSION_ERROR", "Invalid table token used", { token: input.token });
-          throw new Error("Invalid table token");
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Invalid table token",
+          });
         }
 
         const table = tableResult[0];
         const cafeteriaId = table.cafeteriaId;
         
         if (!cafeteriaId) {
-          throw new Error("Table is not linked to any cafeteria");
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Table is not linked to any cafeteria",
+          });
         }
 
         const now = new Date();
@@ -196,7 +207,10 @@ export const qrOrdersRouter = router({
             .where(eq(menuItems.id, item.menuItemId));
           
           if (!menuItemResult || menuItemResult.length === 0) {
-            throw new Error(`Menu item ${item.menuItemId} not found`);
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: `Menu item ${item.menuItemId} not found`,
+            });
           }
           
           const menuItem = menuItemResult[0];
@@ -268,6 +282,7 @@ export const qrOrdersRouter = router({
           createdAt: now,
         };
       } catch (error: any) {
+        if (error instanceof TRPCError) throw error;
         logger.error("ORDER_SUBMISSION_ERROR", error.message, { input });
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -284,7 +299,12 @@ export const qrOrdersRouter = router({
     .input(z.object({ orderId: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
+      if (!db) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database not available",
+        });
+      }
 
       const orderResult = await db
         .select({
@@ -302,7 +322,10 @@ export const qrOrdersRouter = router({
         .where(eq(orders.id, input.orderId));
 
       if (!orderResult || orderResult.length === 0) {
-        throw new Error("Order not found");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Order not found",
+        });
       }
 
       const order = orderResult[0];
@@ -337,7 +360,7 @@ export const qrOrdersRouter = router({
           name: item.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
+          totalPrice: item.itemTotal, // Note: using itemTotal from itemsWithPrices logic if needed, but here it's from DB
           status: item.status,
           notes: item.notes,
         })),
