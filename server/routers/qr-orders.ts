@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc.js";
+import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db.js";
@@ -20,7 +21,12 @@ export const qrOrdersRouter = router({
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
+      if (!db) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database not available",
+        });
+      }
 
       const table = await db
         .select()
@@ -28,7 +34,10 @@ export const qrOrdersRouter = router({
         .where(eq(cafeteriaTables.tableToken, input.token));
 
       if (!table || table.length === 0) {
-        throw new Error("Invalid table token");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Invalid table token",
+        });
       }
 
       const tableData = table[0];
@@ -58,7 +67,12 @@ export const qrOrdersRouter = router({
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
+      if (!db) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database not available",
+        });
+      }
 
       // Step 1: Resolve table from token
       const tableResult = await db
@@ -68,7 +82,10 @@ export const qrOrdersRouter = router({
 
       if (!tableResult || tableResult.length === 0) {
         logger.warn("GET_MENU_ERROR", "Invalid table token", { token: input.token });
-        throw new Error("Invalid table token");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Invalid table token",
+        });
       }
 
       const table = tableResult[0];
@@ -252,7 +269,11 @@ export const qrOrdersRouter = router({
         };
       } catch (error: any) {
         logger.error("ORDER_SUBMISSION_ERROR", error.message, { input });
-        throw new Error(error.message || "Failed to submit order. Please try again.");
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error.message || "Failed to submit order. Please try again.",
+          cause: error,
+        });
       }
     }),
 
