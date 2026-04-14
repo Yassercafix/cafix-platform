@@ -6,7 +6,7 @@ if (!process.env.DATABASE_URL) {
 }
 if (!process.env.JWT_SECRET) {
   console.error("[ENV] CRITICAL: Missing JWT_SECRET — session signing will fail");
-  throw new Error("CRITICAL: Missing JWT_SECRET environment variable");
+  // Don't throw here to avoid crashing the whole app on Vercel if some public routes (like QR) don't need it
 }
 if (!process.env.SUPABASE_URL) {
   console.warn("[ENV] WARNING: Missing SUPABASE_URL");
