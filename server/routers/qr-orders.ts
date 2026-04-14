@@ -360,7 +360,7 @@ export const qrOrdersRouter = router({
           name: item.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          totalPrice: item.itemTotal, // Note: using itemTotal from itemsWithPrices logic if needed, but here it's from DB
+          totalPrice: item.totalPrice, // Fixed: use totalPrice from DB query result
           status: item.status,
           notes: item.notes,
         })),
