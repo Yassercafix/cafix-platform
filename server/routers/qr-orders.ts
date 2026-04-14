@@ -107,15 +107,19 @@ export const qrOrdersRouter = router({
 
       const categoryIds = categories.map((c: any) => c.id);
 
-      // Step 3: Get menu items for these categories
+      // Step 3: Get menu items for these categories (only available items)
       const items = await db
         .select()
         .from(menuItems)
-        .where(inArray(menuItems.categoryId, categoryIds));
+        .where(and(inArray(menuItems.categoryId, categoryIds), eq(menuItems.available, true)));
+
+      // Build a category map for quick lookup
+      const categoryMap = new Map(categories.map((c: any) => [c.id, c.name]));
 
       return items.map((item: any) => ({
         id: item.id,
         categoryId: item.categoryId,
+        categoryName: categoryMap.get(item.categoryId) || item.categoryId,
         name: item.name,
         description: item.description,
         price: Number(item.price) || 0,
@@ -218,6 +222,15 @@ export const qrOrdersRouter = router({
           }
           
           const menuItem = menuItemResult[0];
+
+          // Check if item is available
+          if (menuItem.available === false) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Menu item "${menuItem.name}" is currently unavailable`,
+            });
+          }
+
           const price = parseFloat(menuItem.price || "0");
           const itemTotal = price * item.quantity;
           totalAmount += itemTotal;

@@ -12,6 +12,7 @@ import { getDb } from "../db.js";
 import {
   orders,
   orderItems,
+  menuItems,
   cafeterias,
   cafeteriaTables,
   ledgerEntries,

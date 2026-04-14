@@ -177,6 +177,7 @@ export default function CustomerMenu() {
       items: cart.map((item) => ({
         menuItemId: item.menuItemId,
         quantity: item.quantity,
+        notes: item.notes || undefined,
       })),
     });
   };
@@ -190,7 +191,7 @@ export default function CustomerMenu() {
     menuData.forEach((item: any) => {
       if (!seen.has(item.categoryId)) {
         seen.add(item.categoryId);
-        cats.push({ id: item.categoryId, name: item.categoryId });
+        cats.push({ id: item.categoryId, name: item.categoryName || item.categoryId });
       }
     });
     return cats;
