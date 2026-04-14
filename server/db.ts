@@ -35,8 +35,16 @@ export const db = drizzle(pool, {
   logger: false,
 });
 
-export function getDb() {
-  return db;
+export async function getDb() {
+  // Ensure the pool is ready
+  try {
+    // Simple query to test connection if needed, but for now just return the db instance
+    // drizzle-orm/node-postgres with Pool handles lazy connection
+    return db;
+  } catch (err) {
+    console.error("[DB] Connection failed:", err);
+    throw err;
+  }
 }
 
 export default db;
