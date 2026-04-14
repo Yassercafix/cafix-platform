@@ -48,19 +48,17 @@ export const serviceRequestsRouter = router({
         }
 
         // Create new service request
-        const newRequest = await db
+        await db
           .insert(serviceRequests)
           .values({
             cafeteriaId: input.cafeteriaId,
             tableId: input.tableId,
             requestType: input.requestType,
             status: "pending",
-          })
-          .returning();
+          });
 
         return {
           success: true,
-          request: newRequest[0],
         };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
@@ -141,25 +139,16 @@ export const serviceRequestsRouter = router({
         }
 
         // Update the request to completed
-        const updated = await db
+        await db
           .update(serviceRequests)
           .set({
             status: "completed",
             completedAt: new Date(),
           })
-          .where(eq(serviceRequests.id, input.requestId))
-          .returning();
-
-        if (updated.length === 0) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Service request not found",
-          });
-        }
+          .where(eq(serviceRequests.id, input.requestId));
 
         return {
           success: true,
-          request: updated[0],
         };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
