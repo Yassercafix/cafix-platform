@@ -188,10 +188,13 @@ export const commissionConfigs = pgTable(
   "commissionConfigs",
   {
     id: text("id").primaryKey().$defaultFn(() => nanoid()),
+    ownerId: text("ownerId"),
     marketerId: text("marketerId").notNull(),
     rate: decimal("rate", { precision: 5, scale: 2 }).default("0"),
+    commissionPercentage: decimal("commissionPercentage", { precision: 5, scale: 2 }).default("0"),
     expiryOverrideMonths: integer("expiryOverrideMonths"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()),
   }
 );
 
@@ -213,7 +216,10 @@ export const rechargeRequests = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(() => nanoid()),
     cafeteriaId: text("cafeteriaId").notNull(),
-    amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+    requestedByStaffId: text("requestedByStaffId"),
+    amount: decimal("amount", { precision: 10, scale: 2 }),
+    usdAmount: decimal("usdAmount", { precision: 15, scale: 2 }),
+    pointsAmount: decimal("pointsAmount", { precision: 15, scale: 2 }),
     imageUrl: text("imageUrl"),
     status: rechargeStatusEnum("status").default("pending"),
     processedAt: timestamp("processedAt"),
@@ -231,6 +237,9 @@ export const rechargeRequests = pgTable(
     currency: varchar("currency", { length: 3 }),
     language: varchar("language", { length: 10 }),
     attachmentUrls: jsonb("attachmentUrls").default([]),
+    approvedByOwnerId: text("approvedByOwnerId"),
+    rejectionReason: text("rejectionReason"),
+    approvedAt: timestamp("approvedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   }
 );
@@ -840,12 +849,19 @@ export const withdrawalRequests = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(() => nanoid()),
     marketerId: text("marketerId").notNull(),
-    amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+    amount: decimal("amount", { precision: 15, scale: 2 }),
+    pointsAmount: decimal("pointsAmount", { precision: 15, scale: 2 }),
+    usdAmount: decimal("usdAmount", { precision: 15, scale: 2 }),
     status: withdrawalStatusEnum("status").default("pending"),
+    approvedByOwnerId: text("approvedByOwnerId"),
+    rejectionReason: text("rejectionReason"),
+    markedAsPaidAt: timestamp("markedAsPaidAt"),
     requestedAt: timestamp("requestedAt").defaultNow().notNull(),
     processedAt: timestamp("processedAt"),
     processedBy: text("processedBy"),
     notes: text("notes"),
+    approvedAt: timestamp("approvedAt"),
+    createdAt: timestamp("createdAt").defaultNow(),
   }
 );
 
@@ -1079,27 +1095,8 @@ export const pointTransactions = pgTable(
 export type PointTransaction = typeof pointTransactions.$inferSelect;
 export type InsertPointTransaction = typeof pointTransactions.$inferInsert;
 
-// Recharge Requests - Cafeteria admin requests points
-export const rechargeRequests = pgTable(
-  "rechargeRequests",
-  {
-    id: text("id").primaryKey().$defaultFn(() => nanoid()),
-    cafeteriaId: text("cafeteriaId").notNull(),
-    requestedByStaffId: text("requestedByStaffId").notNull(),
-    usdAmount: decimal("usdAmount", { precision: 15, scale: 2 }).notNull(),
-    pointsAmount: decimal("pointsAmount", { precision: 15, scale: 2 }).notNull(),
-    status: rechargeStatusEnum("status").default("pending").notNull(),
-    approvedByOwnerId: text("approvedByOwnerId"),
-    rejectionReason: text("rejectionReason"),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    approvedAt: timestamp("approvedAt"),
-  }
-);
 
-export type RechargeRequest = typeof rechargeRequests.$inferSelect;
-export type InsertRechargeRequest = typeof rechargeRequests.$inferInsert;
-
-// Commission Records - Track marketer commissions
+// Commission Records - Track marketer commissions per order
 export const commissionRecords = pgTable(
   "commissionRecords",
   {
@@ -1109,8 +1106,8 @@ export const commissionRecords = pgTable(
     cafeteriaId: text("cafeteriaId").notNull(),
     commissionPercentage: decimal("commissionPercentage", { precision: 5, scale: 2 }).notNull(),
     orderAmount: decimal("orderAmount", { precision: 15, scale: 2 }).notNull(),
-    commissionAmount: decimal("commissionAmount", { precision: 15, scale: 2 }).notNull(), // In USD
-    commissionPoints: decimal("commissionPoints", { precision: 15, scale: 2 }).notNull(), // Converted to points
+    commissionAmount: decimal("commissionAmount", { precision: 15, scale: 2 }).notNull(),
+    commissionPoints: decimal("commissionPoints", { precision: 15, scale: 2 }).notNull(),
     status: commissionStatusEnum("status").default("pending").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   }
@@ -1118,39 +1115,3 @@ export const commissionRecords = pgTable(
 
 export type CommissionRecord = typeof commissionRecords.$inferSelect;
 export type InsertCommissionRecord = typeof commissionRecords.$inferInsert;
-
-// Withdrawal Requests - Marketer requests to withdraw commissions
-export const withdrawalRequests = pgTable(
-  "withdrawalRequests",
-  {
-    id: text("id").primaryKey().$defaultFn(() => nanoid()),
-    marketerId: text("marketerId").notNull(),
-    pointsAmount: decimal("pointsAmount", { precision: 15, scale: 2 }).notNull(),
-    usdAmount: decimal("usdAmount", { precision: 15, scale: 2 }).notNull(),
-    status: withdrawalStatusEnum("status").default("pending").notNull(),
-    approvedByOwnerId: text("approvedByOwnerId"),
-    rejectionReason: text("rejectionReason"),
-    markedAsPaidAt: timestamp("markedAsPaidAt"),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    approvedAt: timestamp("approvedAt"),
-  }
-);
-
-export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
-export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert;
-
-// Commission Configuration - Owner sets commission rates per marketer
-export const commissionConfigs = pgTable(
-  "commissionConfigs",
-  {
-    id: text("id").primaryKey().$defaultFn(() => nanoid()),
-    ownerId: text("ownerId").notNull(),
-    marketerId: text("marketerId").notNull(),
-    commissionPercentage: decimal("commissionPercentage", { precision: 5, scale: 2 }).notNull(), // e.g., 5.00 for 5%
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
-  }
-);
-
-export type CommissionConfig = typeof commissionConfigs.$inferSelect;
-export type InsertCommissionConfig = typeof commissionConfigs.$inferInsert;
