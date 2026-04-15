@@ -36,8 +36,8 @@ const connectionString =
   "";
 
 if (!connectionString) {
-  throw new Error(
-    "Missing database connection string. Set DIRECT_URL or DATABASE_URL."
+  console.error(
+    "[DB] WARNING: Missing database connection string. Set DIRECT_URL or DATABASE_URL."
   );
 }
 
@@ -49,10 +49,13 @@ if (!connectionString) {
  *   'unable to open database file'
  */
 const pool = new Pool({
-  connectionString,
+  connectionString: connectionString || undefined,
   max: 10,
   idleTimeoutMillis: 20000,
   connectionTimeoutMillis: 15000,
+  ssl: connectionString
+    ? { rejectUnauthorized: false }
+    : undefined,
 });
 
 export const db = drizzle(pool, {
